@@ -28,8 +28,8 @@ angular.module('beamng.apps')
           '.steerCamApp.locked .sc-row{opacity:0.5}',
           '.steerCamApp.locked .sc-chk label{cursor:default}',
           '.steerCamApp .sc-row.sc-dim{opacity:0.45}',
-          '.steerCamApp .sc-sec .sc-en{display:flex;align-items:center;gap:7px;cursor:pointer}',
-          '.steerCamApp .sc-sec .sc-en input{accent-color:#ff7a18}',
+          '.steerCamApp .sc-sec .sc-en{display:flex;align-items:center;justify-content:space-between;cursor:pointer}',
+          '.steerCamApp .sc-sec .sc-en input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-hint{font-size:10px;color:#9a9aa0;margin-top:6px}',
         '</style>',
 
@@ -39,7 +39,7 @@ angular.module('beamng.apps')
           '<button ng-repeat="p in presetNames" ng-class="{active: preset===p}" ng-click="choose(p)">{{p}}</button>',
         '</div>',
 
-        '<div class="sc-sec"><label class="sc-en"><input type="checkbox" ng-model="cfg.steerEnable" ng-change="set(\'steerEnable\', cfg.steerEnable)" ng-disabled="locked"> Steer camera turn</label></div>',
+        '<div class="sc-sec"><label class="sc-en"><span>Steer camera turn</span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="set(\'steerEnable\', cfg.steerEnable)" ng-disabled="locked"></label></div>',
         '<div class="sc-row" ng-show="cfg.steerEnable"><span>Angle</span>',
           '<input type="range" min="0" max="90" step="1" ng-model="cfg.angle" ng-change="set(\'angle\', cfg.angle)" ng-disabled="locked">',
           '<b>{{cfg.angle}}°</b></div>',
@@ -54,7 +54,7 @@ angular.module('beamng.apps')
           '<input type="range" min="0.5" max="40" step="0.5" ng-model="cfg.fadeSpeed" ng-change="set(\'fadeSpeed\', cfg.fadeSpeed)" ng-disabled="locked">',
           '<b>{{cfg.fadeSpeed}}</b></div>',
 
-        '<div class="sc-sec"><label class="sc-en"><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="set(\'glanceEnable\', cfg.glanceEnable)" ng-disabled="locked"> Blind-spot glance</label></div>',
+        '<div class="sc-sec"><label class="sc-en"><span>Blind-spot glance</span><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="set(\'glanceEnable\', cfg.glanceEnable)" ng-disabled="locked"></label></div>',
         '<div class="sc-row" ng-show="cfg.glanceEnable"><span>Left angle</span>',
           '<input type="range" min="0" max="170" step="5" ng-model="cfg.glanceLeft" ng-change="set(\'glanceLeft\', cfg.glanceLeft)" ng-disabled="locked">',
           '<b>{{cfg.glanceLeft}}°</b></div>',
@@ -76,13 +76,13 @@ angular.module('beamng.apps')
         '</div>',
         '<div class="sc-hint" ng-show="cfg.glanceEnable">Preview holds the glance so you can tune the angle. Needs the SteerCam view active (press C).</div>',
 
-        '<div class="sc-sec"><label class="sc-en"><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="set(\'speedModEnable\', cfg.speedModEnable)" ng-disabled="locked"> Speed modifiers</label></div>',
+        '<div class="sc-sec"><label class="sc-en"><span>Speed modifiers</span><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="set(\'speedModEnable\', cfg.speedModEnable)" ng-disabled="locked"></label></div>',
         '<div class="sc-row sc-chk" ng-class="{\'sc-dim\': !cfg.speedModEnable}"><label><input type="checkbox" ng-model="cfg.vertigo" ng-change="set(\'vertigo\', cfg.vertigo)" ng-disabled="locked || !cfg.speedModEnable"> Speed vertigo (FOV)</label></div>',
         '<div class="sc-row" ng-class="{\'sc-dim\': !cfg.speedModEnable || !cfg.vertigo}"><span>FOV change</span>',
           '<input type="range" min="0" max="40" step="1" ng-model="cfg.vertigoFov" ng-change="set(\'vertigoFov\', cfg.vertigoFov)" ng-disabled="locked || !cfg.speedModEnable || !cfg.vertigo">',
           '<b>{{cfg.vertigoFov}}°</b></div>',
         '<div class="sc-row" ng-class="{\'sc-dim\': !cfg.speedModEnable || !cfg.vertigo}"><span>Dolly depth</span>',
-          '<input type="range" min="0" max="6" step="0.1" ng-model="cfg.vertigoDolly" ng-change="set(\'vertigoDolly\', cfg.vertigoDolly)" ng-disabled="locked || !cfg.speedModEnable || !cfg.vertigo">',
+          '<input type="range" min="0" max="1.5" step="0.01" ng-model="cfg.vertigoDolly" ng-change="set(\'vertigoDolly\', cfg.vertigoDolly)" ng-disabled="locked || !cfg.speedModEnable || !cfg.vertigo">',
           '<b>{{cfg.vertigoDolly}}m</b></div>',
         '<div class="sc-row sc-chk" ng-class="{\'sc-dim\': !cfg.speedModEnable}"><label><input type="checkbox" ng-model="cfg.speedRoll" ng-change="set(\'speedRoll\', cfg.speedRoll)" ng-disabled="locked || !cfg.speedModEnable"> Speed camera roll</label></div>',
         '<div class="sc-row" ng-class="{\'sc-dim\': !cfg.speedModEnable || !cfg.speedRoll}"><span>Roll change</span>',
@@ -90,7 +90,7 @@ angular.module('beamng.apps')
           '<b>{{cfg.rollAngle}}°</b></div>',
         '<div class="sc-row" ng-class="{\'sc-dim\': !cfg.speedModEnable}"><span>Speed range</span>',
           '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedRange" ng-change="set(\'speedRange\', cfg.speedRange)" ng-disabled="locked || !cfg.speedModEnable">',
-          '<b>{{cfg.speedRange}}</b></div>',
+          '<b style="flex:0 0 64px">{{cfg.speedRange}} km/h</b></div>',
 
         '<div class="sc-hint" ng-show="locked">Default is locked. Switch to Custom to edit.</div>',
       '</div>'
@@ -109,7 +109,7 @@ angular.module('beamng.apps')
         glanceLeft: 115, glanceRight: 115, glanceTime: 120,
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10,
         speedModEnable: true,
-        vertigo: false, vertigoFov: 15, vertigoDolly: 1.5, speedRoll: false, rollAngle: 5, speedRange: 160
+        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160
       };
 
       function pushOne(key, val) {

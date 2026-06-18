@@ -39,7 +39,7 @@ if not steerCam then
   steerCam.defaults = {
     steerEnable = true,  -- master toggle for the steer-follow turn
     angle      = 18.0,   -- max yaw at full lock (deg)
-    reach      = 35.0,   -- % of steering input at which the full angle is reached
+    reach      = 65.0,   -- % of steering input at which the full angle is reached
     stiffness  = 15.0,   -- transition speed (higher = snappier)
     speedFade  = false,  -- scale turn by speed (off = full at any speed)
     fadeSpeed  = 8.0,    -- m/s for full strength when speedFade is on
@@ -52,8 +52,8 @@ if not steerCam then
     -- "Speed modifiers" (mostly for fun; both ramp to full strength at speedRange)
     speedModEnable = true, -- master toggle for the whole speed-modifiers section
     vertigo    = false,  -- FOV widens with speed (speed vertigo)
-    vertigoFov = 15.0,   -- max extra FOV (deg) reached at speedRange
-    vertigoDolly = 1.5,  -- distance (m) kept pinned by the counter-dolly (0 = off)
+    vertigoFov = 12.0,   -- max extra FOV (deg) reached at speedRange
+    vertigoDolly = 0.30, -- distance (m) kept pinned by the counter-dolly (0 = off)
     speedRoll  = false,  -- camera banks into corners, scaled by speed
     rollAngle  = 5.0,    -- max roll (deg)
     speedRange = 160.0,  -- km/h at which the effects reach full strength
@@ -90,7 +90,7 @@ if not steerCam then
     angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {0.5, 40},
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
     glanceOffsetLeft = {0, 0.6}, glanceOffsetRight = {0, 0.6},
-    vertigoFov = {0, 40}, vertigoDolly = {0, 6}, rollAngle = {0, 20}, speedRange = {20, 400},
+    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
   }
   local bools  = {
     speedFade = true, vertigo = true, speedRoll = true,

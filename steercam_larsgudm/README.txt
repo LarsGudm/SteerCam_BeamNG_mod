@@ -60,9 +60,10 @@ Speed modifiers (mostly for fun, scale with speed; SteerCam view only):
   Speed vertigo (FOV)           widen the FOV as you go faster, with a matching
                                 forward dolly (the dolly-zoom "vertigo" warp)
   FOV change         0-40 deg   max extra FOV reached at the speed range
-  Dolly depth        0-6 m      distance kept "pinned" by the counter-dolly:
-                                0 = FOV only (no camera move); higher pins more
-                                distant things but moves the camera forward more
+  Dolly depth        0-1.5 m    distance kept "pinned" by the counter-dolly
+                                (def. 0.30): 0 = FOV only (no camera move);
+                                higher pins more distant things but moves the
+                                camera forward more
   Speed camera roll             lean into the turn from steering input; hidden
                                 at low speed, grows as you near the speed range
   Roll change        0-20 deg   max lean angle (full steering at the speed range)
