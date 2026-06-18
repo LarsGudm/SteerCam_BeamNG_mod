@@ -1,0 +1,15 @@
+{
+  "name": "Steer Cam Settings",
+  "author": "LarsGudm",
+  "version": "1.0",
+  "description": "Adjust SteerCam: the driver camera that turns toward where your wheels point.",
+  "directive": "steerCam",
+  "domElement": "<steer-cam></steer-cam>",
+  "css": {
+    "width": "250px",
+    "height": "262px",
+    "top": "120px",
+    "left": "20px"
+  },
+  "preserveAspectRatio": false
+}
