@@ -12,6 +12,11 @@ angular.module('beamng.apps')
             'border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer}',
           '.steerCamApp .sc-presets button:hover{background:rgba(255,255,255,0.16)}',
           '.steerCamApp .sc-presets button.active{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
+          '.steerCamApp .sc-glance-btns{display:flex;gap:5px;margin:7px 0 2px}',
+          '.steerCamApp .sc-glance-btns button{flex:1 1 0;background:rgba(255,255,255,0.08);color:#e8e8ea;',
+            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 6px;font-size:11px;cursor:pointer}',
+          '.steerCamApp .sc-glance-btns button:hover{background:rgba(255,255,255,0.16)}',
+          '.steerCamApp .sc-glance-btns button.active{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
           '.steerCamApp .sc-sec{font-weight:600;margin:4px 0 5px;color:#ffae6b;',
             'border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:2px}',
           '.steerCamApp .sc-row{display:flex;align-items:center;gap:7px;margin:5px 0}',
@@ -34,7 +39,7 @@ angular.module('beamng.apps')
         '<div class="sc-sec">Steer camera turn</div>',
         '<div class="sc-row"><span>Angle</span>',
           '<input type="range" min="0" max="90" step="1" ng-model="cfg.angle" ng-change="set(\'angle\', cfg.angle)" ng-disabled="locked">',
-          '<b>{{cfg.angle}}\u00B0</b></div>',
+          '<b>{{cfg.angle}}°</b></div>',
         '<div class="sc-row"><span>Full angle at</span>',
           '<input type="range" min="10" max="100" step="5" ng-model="cfg.reach" ng-change="set(\'reach\', cfg.reach)" ng-disabled="locked">',
           '<b>{{cfg.reach}}%</b></div>',
@@ -47,6 +52,25 @@ angular.module('beamng.apps')
           '<input type="range" min="0.5" max="40" step="0.5" ng-model="cfg.fadeSpeed" ng-change="set(\'fadeSpeed\', cfg.fadeSpeed)" ng-disabled="locked">',
           '<b>{{cfg.fadeSpeed}}</b></div>',
 
+        '<div class="sc-sec">Blind-spot glance</div>',
+        '<div class="sc-row"><span>Left angle</span>',
+          '<input type="range" min="0" max="170" step="5" ng-model="cfg.glanceLeft" ng-change="set(\'glanceLeft\', cfg.glanceLeft)" ng-disabled="locked">',
+          '<b>{{cfg.glanceLeft}}°</b></div>',
+        '<div class="sc-row"><span>Right angle</span>',
+          '<input type="range" min="0" max="170" step="5" ng-model="cfg.glanceRight" ng-change="set(\'glanceRight\', cfg.glanceRight)" ng-disabled="locked">',
+          '<b>{{cfg.glanceRight}}°</b></div>',
+        '<div class="sc-row"><span>Glance time</span>',
+          '<input type="range" min="0" max="500" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked">',
+          '<b>{{cfg.glanceTime}}ms</b></div>',
+        '<div class="sc-row"><span>Side offset</span>',
+          '<input type="range" min="0" max="0.6" step="0.05" ng-model="cfg.glanceOffset" ng-change="set(\'glanceOffset\', cfg.glanceOffset)" ng-disabled="locked">',
+          '<b>{{cfg.glanceOffset}}m</b></div>',
+        '<div class="sc-glance-btns">',
+          '<button ng-class="{active: glanceSide===\'left\'}" ng-click="toggleGlance(\'left\')">Preview left</button>',
+          '<button ng-class="{active: glanceSide===\'right\'}" ng-click="toggleGlance(\'right\')">Preview right</button>',
+        '</div>',
+        '<div class="sc-hint">Preview holds the glance so you can tune the angle. Needs the SteerCam view active (press C).</div>',
+
         '<div class="sc-hint" ng-show="locked">Default is locked. Switch to Custom to edit.</div>',
       '</div>'
     ].join(''),
@@ -56,7 +80,11 @@ angular.module('beamng.apps')
       scope.presetNames = ['Default', 'Custom'];
       scope.preset = 'Default';
       scope.locked = true;
-      scope.cfg = { angle: 18, reach: 35, stiffness: 15, invert: false, speedFade: false, fadeSpeed: 8 };
+      scope.glanceSide = 'none';
+      scope.cfg = {
+        angle: 18, reach: 35, stiffness: 15, invert: false, speedFade: false, fadeSpeed: 8,
+        glanceLeft: 90, glanceRight: 90, glanceTime: 100, glanceOffset: 0.1
+      };
 
       function pushOne(key, val) {
         if (typeof val === 'boolean') {
@@ -66,6 +94,17 @@ angular.module('beamng.apps')
           if (isNaN(n)) { return; }
           bngApi.engineLua("if steerCam then steerCam.set('" + key + "', " + n + ") end");
         }
+      }
+
+      function syncGlance() {
+        bngApi.engineLua('steerCam and steerCam.getGlanceState() or nil', function (st) {
+          if (st && typeof st === 'object') {
+            scope.$evalAsync(function () {
+              var t = st.toggle;
+              scope.glanceSide = (t === 1) ? 'left' : (t === -1) ? 'right' : 'none';
+            });
+          }
+        });
       }
 
       function load() {
@@ -80,6 +119,7 @@ angular.module('beamng.apps')
             });
           }
         });
+        syncGlance();
       }
 
       // click Default / Custom
@@ -94,6 +134,14 @@ angular.module('beamng.apps')
       scope.set = function (key, val) {
         if (scope.locked) { return; }
         pushOne(key, val);
+      };
+
+      // preview buttons: latch the glance for a side so the angle can be tuned
+      // live. Works on either profile (no lock), unlike the sliders.
+      scope.toggleGlance = function (side) {
+        scope.glanceSide = (scope.glanceSide === side) ? 'none' : side;
+        var on = (scope.glanceSide === side);
+        bngApi.engineLua("if steerCam then steerCam.glanceSet('" + side + "', " + (on ? 'true' : 'false') + ") end");
       };
 
       element.ready(function () {

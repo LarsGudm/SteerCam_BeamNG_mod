@@ -37,29 +37,41 @@ if not steerCam then
 
   -- The Default profile (fixed; never written to).
   steerCam.defaults = {
-    angle     = 18.0,   -- max yaw at full lock (deg)
-    reach     = 35.0,   -- % of steering input at which the full angle is reached
-    stiffness = 15.0,   -- transition speed (higher = snappier)
-    invert    = false,  -- flip turn direction
-    speedFade = false,  -- scale turn by speed (off = full at any speed)
-    fadeSpeed = 8.0,    -- m/s for full strength when speedFade is on
+    angle      = 18.0,   -- max yaw at full lock (deg)
+    reach      = 35.0,   -- % of steering input at which the full angle is reached
+    stiffness  = 15.0,   -- transition speed (higher = snappier)
+    invert     = false,  -- flip turn direction
+    speedFade  = false,  -- scale turn by speed (off = full at any speed)
+    fadeSpeed  = 8.0,    -- m/s for full strength when speedFade is on
+    glanceLeft  = 90.0,  -- blind-spot glance angle to the left (deg)
+    glanceRight = 90.0,  -- blind-spot glance angle to the right (deg)
+    glanceTime  = 100.0, -- ms to complete a glance (<=5 = instant snap)
+    glanceOffset = 0.1,  -- m to lean toward the glance side (avoids seat clipping)
   }
 
   -- The Custom profile (editable; starts as a copy of Default, then persists).
   steerCam.custom = {
-    angle     = getNum("steerCam_custom_angle",      steerCam.defaults.angle),
-    reach     = getNum("steerCam_custom_reach",      steerCam.defaults.reach),
-    stiffness = getNum("steerCam_custom_stiffness",  steerCam.defaults.stiffness),
-    invert    = getBool("steerCam_custom_invert",    steerCam.defaults.invert),
-    speedFade = getBool("steerCam_custom_speedFade", steerCam.defaults.speedFade),
-    fadeSpeed = getNum("steerCam_custom_fadeSpeed",  steerCam.defaults.fadeSpeed),
+    angle      = getNum("steerCam_custom_angle",       steerCam.defaults.angle),
+    reach      = getNum("steerCam_custom_reach",       steerCam.defaults.reach),
+    stiffness  = getNum("steerCam_custom_stiffness",   steerCam.defaults.stiffness),
+    invert     = getBool("steerCam_custom_invert",     steerCam.defaults.invert),
+    speedFade  = getBool("steerCam_custom_speedFade",  steerCam.defaults.speedFade),
+    fadeSpeed  = getNum("steerCam_custom_fadeSpeed",   steerCam.defaults.fadeSpeed),
+    glanceLeft  = getNum("steerCam_custom_glanceLeft",   steerCam.defaults.glanceLeft),
+    glanceRight = getNum("steerCam_custom_glanceRight",  steerCam.defaults.glanceRight),
+    glanceTime  = getNum("steerCam_custom_glanceTime",   steerCam.defaults.glanceTime),
+    glanceOffset = getNum("steerCam_custom_glanceOffset", steerCam.defaults.glanceOffset),
   }
 
   steerCam.preset = getStr("steerCam_preset", "Default")
   -- steerCam.cfg points at whichever profile is active (the camera reads this)
   steerCam.cfg = (steerCam.preset == "Custom") and steerCam.custom or steerCam.defaults
 
-  local ranges = { angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {0.5, 40} }
+  local ranges = {
+    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {0.5, 40},
+    glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
+    glanceOffset = {0, 0.6},
+  }
   local bools  = { invert = true, speedFade = true }
 
   -- UI: switch active profile
@@ -93,20 +105,69 @@ if not steerCam then
       preset = steerCam.preset,
       angle = a.angle, reach = a.reach, stiffness = a.stiffness,
       invert = a.invert, speedFade = a.speedFade, fadeSpeed = a.fadeSpeed,
+      glanceLeft = a.glanceLeft, glanceRight = a.glanceRight, glanceTime = a.glanceTime,
+      glanceOffset = a.glanceOffset,
     }
+  end
+
+  -- ----- Blind-spot glance runtime ------------------------------------------
+  -- Side convention: left = +1, right = -1 (matches steer-left = positive yaw).
+  steerCam.glanceHoldSide   = 0   -- held key: -1 right / 0 none / +1 left
+  steerCam.glanceToggleSide = 0   -- latched side (toggle binding / UI preview)
+
+  local function sideNum(s)
+    if s == "left"  or s == 1  then return 1  end
+    if s == "right" or s == -1 then return -1 end
+    return 0
+  end
+  local function truthy(v) return v == true or v == 1 or v == "true" end
+
+  -- hold bindings: glance while the key is down, return on release
+  function steerCam.glanceHold(side, down)
+    local s = sideNum(side); if s == 0 then return end
+    if truthy(down) then
+      steerCam.glanceHoldSide = s
+    elseif steerCam.glanceHoldSide == s then
+      steerCam.glanceHoldSide = 0
+    end
+  end
+
+  -- toggle bindings: flip the latched glance for a side
+  function steerCam.glanceToggle(side)
+    local s = sideNum(side); if s == 0 then return end
+    steerCam.glanceToggleSide = (steerCam.glanceToggleSide == s) and 0 or s
+  end
+
+  -- UI preview buttons: set the latched glance explicitly
+  function steerCam.glanceSet(side, on)
+    local s = sideNum(side); if s == 0 then return end
+    if truthy(on) then
+      steerCam.glanceToggleSide = s
+    elseif steerCam.glanceToggleSide == s then
+      steerCam.glanceToggleSide = 0
+    end
+  end
+
+  -- UI: read latched/held state so the app can highlight the active side
+  function steerCam.getGlanceState()
+    return { hold = steerCam.glanceHoldSide, toggle = steerCam.glanceToggleSide }
   end
 end
 
 local makeStockDriver = require('core/cameraModes/driver')
 
 local qtmp = quat()
+local gFwd, gUp, gRight = vec3(), vec3(), vec3()  -- scratch for the glance lean
 local rad = math.rad
 local function clamp01(x) return x < 0 and 0 or (x > 1 and 1 or x) end
 local function clampUnit(x) return x < -1 and -1 or (x > 1 and 1 or x) end
 
 return function(...)
   local o = makeStockDriver(...)   -- a real stock driver-camera instance
-  o.steerYaw = 0
+  o.steerYaw  = 0
+  o.glanceAmt = 0   -- 0..1 how far the glance overrides steer-follow
+  o.glanceYaw = 0   -- target yaw of the active glance (rad)
+  o.glanceLat = 0   -- target lateral lean of the active glance (m, + = car right)
 
   local stockUpdate = o.update
   o.update = function(self, data)
@@ -132,8 +193,42 @@ return function(...)
     end
     self.steerYaw = self.steerYaw + (yawTarget - self.steerYaw) * clamp01(dt * c.stiffness)
 
-    qtmp:setFromEuler(0, 0, self.steerYaw)
+    -- Blind-spot glance: overrides steer-follow while a side is engaged, then
+    -- blends back. A held key wins over a latched toggle / UI preview.
+    local side = (steerCam.glanceHoldSide ~= 0) and steerCam.glanceHoldSide
+                                                  or steerCam.glanceToggleSide
+    local desired = 0
+    if side ~= 0 then
+      desired = 1
+      -- side: left = +1, right = -1. Positive yaw turns the view right, so the
+      -- left glance is negative. The lean leans toward the side you look at:
+      -- left = -X (car left), right = +X (car right).
+      self.glanceYaw = (side > 0) and -rad(c.glanceLeft or 0) or rad(c.glanceRight or 0)
+      self.glanceLat = -side * (c.glanceOffset or 0)
+    end
+    -- glanceTime = ms to reach ~95% of the glance; <=5ms snaps instantly
+    local gt = c.glanceTime or 100
+    if gt <= 5 then
+      self.glanceAmt = desired
+    else
+      self.glanceAmt = self.glanceAmt + (desired - self.glanceAmt) * clamp01(dt * (3000 / gt))
+    end
+
+    -- glanceAmt=1 → pure glance (override); glanceAmt=0 → pure steer-follow
+    local finalYaw = self.steerYaw + (self.glanceYaw - self.steerYaw) * self.glanceAmt
+    qtmp:setFromEuler(0, 0, finalYaw)
     data.res.rot:setMul2(qtmp, data.res.rot)
+
+    -- lean the camera sideways along the car's world right vector (forward x up)
+    local lat = self.glanceLat * self.glanceAmt
+    if lat ~= 0 and data.veh ~= nil then
+      gFwd:set(data.veh:getDirectionVector())
+      gUp:set(data.veh:getDirectionVectorUp())
+      gRight:setCross(gFwd, gUp)   -- standard X-right/Y-fwd/Z-up: fwd x up = right
+      gRight:normalize()
+      gRight:setScaled(lat)
+      data.res.pos:setAdd(gRight)
+    end
   end
 
   return o

@@ -1,0 +1,8 @@
+{
+// SteerCam blind-spot glance. Bind these in Options -> Controls -> Bindings (Camera).
+// ctx "tlua" runs the handler in the GE VM, where the steerCam table lives.
+"steercam_glance_left"        :{"cat":"camera", "ctx":"tlua", "onDown":"if steerCam then steerCam.glanceHold('left', true) end",  "onUp":"if steerCam then steerCam.glanceHold('left', false) end",  "title":"SteerCam - Glance left (hold)",   "desc":"Hold to glance toward the left blind spot"},
+"steercam_glance_right"       :{"cat":"camera", "ctx":"tlua", "onDown":"if steerCam then steerCam.glanceHold('right', true) end", "onUp":"if steerCam then steerCam.glanceHold('right', false) end", "title":"SteerCam - Glance right (hold)",  "desc":"Hold to glance toward the right blind spot"},
+"steercam_glance_left_toggle" :{"cat":"camera", "ctx":"tlua", "onDown":"if steerCam then steerCam.glanceToggle('left') end",                                                                       "title":"SteerCam - Glance left (toggle)", "desc":"Toggle a glance toward the left blind spot"},
+"steercam_glance_right_toggle":{"cat":"camera", "ctx":"tlua", "onDown":"if steerCam then steerCam.glanceToggle('right') end",                                                                      "title":"SteerCam - Glance right (toggle)","desc":"Toggle a glance toward the right blind spot"}
+}

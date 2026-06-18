@@ -44,13 +44,40 @@ Controls (editable on Custom):
                                 Fade speed)
   Fade speed                    (only shown when fade is on)
 
+  Left angle         0-170 deg  blind-spot glance angle to the left (def. 90)
+  Right angle        0-170 deg  blind-spot glance angle to the right (def. 90)
+  Glance time        0-500 ms   how fast a glance snaps in/out (0 = instant)
+  Side offset        0-0.6 m    lean toward the side you glance (left leans
+                                left, right leans right) - bump it up if the
+                                view clips into the seat
+
 Changes apply instantly and persist between drives. You can keep the panel open
 while driving to dial in the feel, then remove it.
+
+
+BLIND-SPOT GLANCE
+-----------------
+Quickly snap the view to a fixed angle to check a blind spot, then return. The
+glance overrides the steer-following turn while it's active.
+
+Bind keys in Esc -> Options -> Controls -> Bindings (Camera category):
+  SteerCam - Glance left/right (hold)     hold to look, release to return
+                                          (the intended everyday binding)
+  SteerCam - Glance left/right (toggle)   press to latch on, press again off
+                                          (handy for tuning)
+
+The actions ship UNBOUND - assign whatever keys you like. Glance only affects
+the view while the SteerCam camera is the active view (press C).
+
+Tuning the angles: open the panel, switch to Custom, click "Preview left" or
+"Preview right" to hold the glance, then drag the Left/Right angle slider until
+it feels right. Click the preview button again to release.
 
 
 WHAT'S INSIDE
 -------------
   lua/ge/extensions/core/cameraModes/steercam.lua    the camera + config
+  lua/ge/extensions/core/input/actions/steercam.json    glance key bindings
   lua/vehicle/extensions/auto/steerCamFeed.lua          feeds steering to GE
   ui/modules/apps/SteerCam/                             the settings panel app
 

@@ -11,9 +11,16 @@ head-look) and doesn't replace or conflict with other camera mods.
 
 ## Features
 - Steering-linked "look into corner" yaw, layered on the stock driver camera.
+- **Blind-spot glance**: bindable keys to snap the view to a fixed left/right
+  angle and back — hold to check, release to return (plus a toggle binding for
+  tuning). The glance overrides the steer-follow while it's active.
 - In-game settings app with **Default** (locked) and **Custom** (editable, saved) profiles.
 - Tunable: turn **Angle** (0–90°), **Full angle at** (10–100% of steering),
   **Stiffness** (follow speed), **Invert**, and optional **Fade in with speed**.
+- Glance tunables: **Left/Right angle** (0–170°, default 90), **Glance time**
+  (0–500 ms, 0 = instant), and **Side offset** (lean toward the glanced side to
+  avoid clipping into the seat), with in-panel **Preview** buttons to dial in
+  each side live.
 
 ## Install (for players)
 1. Download the latest `steercam_larsgudm.zip` from Releases.
@@ -21,6 +28,8 @@ head-look) and doesn't replace or conflict with other camera mods.
 3. In game: `Ctrl+L`, then `Ctrl+R`.
 4. Options → Camera → Switching order → tick **Steercam**, then press `C` to reach it.
 5. Add the **Steer Cam Settings** app from Esc → UI Apps → Add App to tune it.
+6. (Optional) Bind the glance keys in Options → Controls → Bindings (Camera) —
+   the four **SteerCam - Glance …** actions ship unbound.
 
 ## Repository layout
 This repo holds the **unpacked source**. The playable mod is just these folders
@@ -28,6 +37,7 @@ zipped with `lua` and `ui` at the root:
 
 ```
 lua/ge/extensions/core/cameraModes/steercam.lua      # the camera + config + UI hooks
+lua/ge/extensions/core/input/actions/steercam.json   # glance key-binding actions
 lua/vehicle/extensions/auto/steerCamFeed.lua         # feeds steering input GE-side
 ui/modules/apps/SteerCam/app.js                      # settings panel (AngularJS)
 ui/modules/apps/SteerCam/app.json                    # app manifest
