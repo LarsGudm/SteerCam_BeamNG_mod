@@ -34,22 +34,40 @@ Two profiles, selected with the buttons at the top:
 
 Controls (editable on Custom):
   Angle              0-90 deg   how far the view turns at full lock
-  Full angle at      10-100 %   how much steering reaches that full angle
+  Steering range     10-100 %   how much steering reaches the full angle
                                 (e.g. 50% = fully turned by half-lock; lower =
-                                more reactive to small steering inputs)
+                                more reactive to small steering inputs). Also
+                                normalizes the steering used by Speed camera roll.
   Stiffness          1-40       transition speed; higher = snappier
-  Invert direction              flip if it turns the wrong way
   Fade in with speed            scales the turn by speed (off = full at any
                                 speed; on = none when stopped, ramps to full by
                                 Fade speed)
   Fade speed                    (only shown when fade is on)
 
-  Left angle         0-170 deg  blind-spot glance angle to the left (def. 90)
-  Right angle        0-170 deg  blind-spot glance angle to the right (def. 90)
+  Left angle         0-170 deg  blind-spot glance angle to the left (def. 115)
+  Right angle        0-170 deg  blind-spot glance angle to the right (def. 115)
   Glance time        0-500 ms   how fast a glance snaps in/out (0 = instant)
-  Side offset        0-0.6 m    lean toward the side you glance (left leans
-                                left, right leans right) - bump it up if the
-                                view clips into the seat
+  Left offset        0-0.6 m    lean left when glancing left (def. 0.10) - bump
+                                it up if the view clips into the seat
+  Right offset       0-0.6 m    lean right when glancing right (def. 0.10)
+
+Each category header ("Steer camera turn", "Blind-spot glance", "Speed
+modifiers") has an enable checkbox. Unticking a header turns that whole feature
+off (the glance keybinds keep existing, they just do nothing while it's off).
+
+Speed modifiers (mostly for fun, scale with speed; SteerCam view only):
+  Speed modifiers               master enable for this section
+  Speed vertigo (FOV)           widen the FOV as you go faster, with a matching
+                                forward dolly (the dolly-zoom "vertigo" warp)
+  FOV change         0-40 deg   max extra FOV reached at the speed range
+  Dolly depth        0-6 m      distance kept "pinned" by the counter-dolly:
+                                0 = FOV only (no camera move); higher pins more
+                                distant things but moves the camera forward more
+  Speed camera roll             lean into the turn from steering input; hidden
+                                at low speed, grows as you near the speed range
+  Roll change        0-20 deg   max lean angle (full steering at the speed range)
+  Speed range        20-400     km/h at which BOTH effects reach full strength
+                                (def. 160; shared ceiling)
 
 Changes apply instantly and persist between drives. You can keep the panel open
 while driving to dial in the feel, then remove it.

@@ -15,12 +15,18 @@ head-look) and doesn't replace or conflict with other camera mods.
   angle and back — hold to check, release to return (plus a toggle binding for
   tuning). The glance overrides the steer-follow while it's active.
 - In-game settings app with **Default** (locked) and **Custom** (editable, saved) profiles.
-- Tunable: turn **Angle** (0–90°), **Full angle at** (10–100% of steering),
-  **Stiffness** (follow speed), **Invert**, and optional **Fade in with speed**.
-- Glance tunables: **Left/Right angle** (0–170°, default 90), **Glance time**
-  (0–500 ms, 0 = instant), and **Side offset** (lean toward the glanced side to
-  avoid clipping into the seat), with in-panel **Preview** buttons to dial in
-  each side live.
+- Tunable: turn **Angle** (0–90°), **Steering range** (10–100% of steering),
+  **Stiffness** (follow speed), and optional **Fade in with speed**.
+- Glance tunables: **Left/Right angle** (0–170°, default 115), **Glance time**
+  (0–500 ms, 0 = instant), and separate **Left/Right offset** (lean toward the
+  glanced side to avoid clipping into the seat), with in-panel **Preview**
+  buttons to dial in each side live.
+- **Speed modifiers** (for fun, speed-driven): **Speed vertigo** (FOV widens with
+  speed plus a matching forward dolly — the dolly-zoom "vertigo" warp) and
+  **Speed camera roll** (leans into the turn from steering input), sharing one
+  **Speed range** ceiling where both reach full strength.
+- Each section ("Steer camera turn", "Blind-spot glance", "Speed modifiers") has
+  an **enable checkbox** in its header to toggle the whole feature on/off.
 
 ## Install (for players)
 1. Download the latest `steercam_larsgudm.zip` from Releases.
