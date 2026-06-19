@@ -39,6 +39,23 @@ angular.module('beamng.apps')
           '<button ng-repeat="p in presetNames" ng-class="{active: preset===p}" ng-click="choose(p)">{{p}}</button>',
         '</div>',
 
+        '<div class="sc-sec"><label class="sc-en"><span>Camera settings override</span><input type="checkbox" ng-model="cfg.camEnable" ng-change="set(\'camEnable\', cfg.camEnable)" ng-disabled="locked"></label></div>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>Forward</span>',
+          '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camFwd" ng-change="set(\'camFwd\', cfg.camFwd)" ng-disabled="locked">',
+          '<b>{{cfg.camFwd}}m</b></div>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>Up</span>',
+          '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camUp" ng-change="set(\'camUp\', cfg.camUp)" ng-disabled="locked">',
+          '<b>{{cfg.camUp}}m</b></div>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>Rotate L/R</span>',
+          '<input type="range" min="-45" max="45" step="1" ng-model="cfg.camYaw" ng-change="set(\'camYaw\', cfg.camYaw)" ng-disabled="locked">',
+          '<b>{{cfg.camYaw}}°</b></div>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>Rotate D/U</span>',
+          '<input type="range" min="-45" max="45" step="1" ng-model="cfg.camPitch" ng-change="set(\'camPitch\', cfg.camPitch)" ng-disabled="locked">',
+          '<b>{{cfg.camPitch}}°</b></div>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>FOV</span>',
+          '<input type="range" min="40" max="120" step="1" ng-model="cfg.camFov" ng-change="set(\'camFov\', cfg.camFov)" ng-disabled="locked">',
+          '<b>{{cfg.camFov}}°</b></div>',
+
         '<div class="sc-sec"><label class="sc-en"><span>Steer camera turn</span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="set(\'steerEnable\', cfg.steerEnable)" ng-disabled="locked"></label></div>',
         '<div class="sc-row" ng-show="cfg.steerEnable"><span>Angle</span>',
           '<input type="range" min="0" max="90" step="1" ng-model="cfg.angle" ng-change="set(\'angle\', cfg.angle)" ng-disabled="locked">',
@@ -103,6 +120,7 @@ angular.module('beamng.apps')
       scope.locked = true;
       scope.glanceSide = 'none';
       scope.cfg = {
+        camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65,
         steerEnable: true,
         angle: 18, reach: 35, stiffness: 15, speedFade: false, fadeSpeed: 8,
         glanceEnable: true,

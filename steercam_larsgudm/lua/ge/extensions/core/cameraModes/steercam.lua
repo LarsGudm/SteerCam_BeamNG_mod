@@ -37,6 +37,13 @@ if not steerCam then
 
   -- The Default profile (fixed; never written to).
   steerCam.defaults = {
+    -- Camera (seat position + FOV override); first category in the UI
+    camEnable  = true,   -- master toggle for the camera-options section
+    camFwd     = 0.0,    -- seat offset forward/back (m, + = forward)
+    camUp      = 0.0,    -- seat offset up/down (m, + = up)
+    camYaw     = 0.0,    -- aim rotation left/right (deg, + = right)
+    camPitch   = 0.0,    -- aim rotation up/down (deg, + = up)
+    camFov     = 65.0,   -- FOV override (deg); replaces the stock camera FOV
     steerEnable = true,  -- master toggle for the steer-follow turn
     angle      = 18.0,   -- max yaw at full lock (deg)
     reach      = 65.0,   -- % of steering input at which the full angle is reached
@@ -61,6 +68,12 @@ if not steerCam then
 
   -- The Custom profile (editable; starts as a copy of Default, then persists).
   steerCam.custom = {
+    camEnable  = getBool("steerCam_custom_camEnable", steerCam.defaults.camEnable),
+    camFwd     = getNum("steerCam_custom_camFwd",     steerCam.defaults.camFwd),
+    camUp      = getNum("steerCam_custom_camUp",      steerCam.defaults.camUp),
+    camYaw     = getNum("steerCam_custom_camYaw",     steerCam.defaults.camYaw),
+    camPitch   = getNum("steerCam_custom_camPitch",   steerCam.defaults.camPitch),
+    camFov     = getNum("steerCam_custom_camFov",     steerCam.defaults.camFov),
     steerEnable = getBool("steerCam_custom_steerEnable", steerCam.defaults.steerEnable),
     angle      = getNum("steerCam_custom_angle",       steerCam.defaults.angle),
     reach      = getNum("steerCam_custom_reach",       steerCam.defaults.reach),
@@ -87,6 +100,7 @@ if not steerCam then
   steerCam.cfg = (steerCam.preset == "Custom") and steerCam.custom or steerCam.defaults
 
   local ranges = {
+    camFwd = {-0.5, 0.5}, camUp = {-0.5, 0.5}, camYaw = {-45, 45}, camPitch = {-45, 45}, camFov = {40, 120},
     angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {0.5, 40},
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
     glanceOffsetLeft = {0, 0.6}, glanceOffsetRight = {0, 0.6},
@@ -94,7 +108,7 @@ if not steerCam then
   }
   local bools  = {
     speedFade = true, vertigo = true, speedRoll = true,
-    steerEnable = true, glanceEnable = true, speedModEnable = true,
+    camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
   }
 
   -- UI: switch active profile
@@ -126,6 +140,8 @@ if not steerCam then
     local a = steerCam.cfg
     return {
       preset = steerCam.preset,
+      camEnable = a.camEnable, camFwd = a.camFwd, camUp = a.camUp,
+      camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov,
       steerEnable = a.steerEnable,
       angle = a.angle, reach = a.reach, stiffness = a.stiffness,
       speedFade = a.speedFade, fadeSpeed = a.fadeSpeed,
@@ -187,9 +203,47 @@ local makeStockDriver = require('core/cameraModes/driver')
 local qtmp = quat()
 local gFwd, gUp, gRight = vec3(), vec3(), vec3()  -- scratch for the glance lean
 local vecY = vec3(0, 1, 0)                         -- camera-local forward axis
+local vecZup = vec3(0, 0, 1)                       -- world up axis
 local rad = math.rad
 local function clamp01(x) return x < 0 and 0 or (x > 1 and 1 or x) end
 local function clampUnit(x) return x < -1 and -1 or (x > 1 and 1 or x) end
+
+-- Make SteerCam look like the stock "driver" camera to the UI, so per-app
+-- "Hide in cockpit view" works while SteerCam is active. BeamNG only hides
+-- cockpit apps when the active camera name is exactly "driver" (see the UI's
+-- app-service handleCameraChange). We remap our name on EVERY notification so a
+-- later engine re-broadcast of "steercam" can't undo it (a one-shot is not
+-- enough). Approach mirrors the Enhanced Interior Camera mod. Installed once.
+do
+  local gh = rawget(_G, 'guihooks')
+  if type(gh) == 'table' and type(gh.trigger) == 'function' and not gh._steerCamWrapped then
+    local orig = gh.trigger
+    gh.trigger = function(evt, payload, ...)
+      if evt == 'onCameraNameChanged' then          -- drives cockpit app hide/show
+        if type(payload) ~= 'table' then payload = { name = payload } end
+        if payload.name == 'steercam' then payload.name = 'driver' end
+      elseif evt == 'CameraConfigChanged' and type(payload) == 'table' then
+        if payload.focusedCamName == 'steercam' then payload.focusedCamName = 'driver' end
+      end
+      return orig(evt, payload, ...)
+    end
+    gh._steerCamWrapped = true
+  end
+end
+
+do
+  local ex = rawget(_G, 'extensions')
+  if type(ex) == 'table' and type(ex.hook) == 'function' and not ex._steerCamCamWrap then
+    local origHook = ex.hook
+    ex.hook = function(evt, ...)
+      if evt == 'onCameraModeChanged' and select(1, ...) == 'steercam' then
+        return origHook(evt, 'driver', select(2, ...))   -- forward remaining args intact
+      end
+      return origHook(evt, ...)
+    end
+    ex._steerCamCamWrap = true
+  end
+end
 
 return function(...)
   local o = makeStockDriver(...)   -- a real stock driver-camera instance
@@ -198,14 +252,59 @@ return function(...)
   o.glanceYaw = 0   -- target yaw of the active glance (rad)
   o.glanceLat = 0   -- target lateral lean of the active glance (m, + = car right)
   o.rollCur   = 0   -- current smoothed speed-roll (rad)
+  o.spdSmooth = 0   -- low-passed speed, so scrub/surge doesn't jitter the effects
+  o._uiKeepAlive = 0   -- timer to reassert the cockpit-hide while active
+
+  -- reset the reassert timer on any camera change so it fires again next frame
+  o.onCameraChanged = function(self, focused)
+    self._uiKeepAlive = 0
+  end
 
   local stockUpdate = o.update
   o.update = function(self, data)
     stockUpdate(self, data)        -- stock fills data.res.pos / rot / fov
 
+    -- Reassert "driver" to the UI every 0.5s while active. The guihooks wrapper
+    -- (above) already remaps the engine's own notifications, but external toggles
+    -- (UI close, multiplayer, etc.) can reset the cockpit state without one.
+    self._uiKeepAlive = (self._uiKeepAlive or 0) - data.dt
+    if self._uiKeepAlive <= 0 then
+      self._uiKeepAlive = 0.5
+      if guihooks then guihooks.trigger('onCameraNameChanged', { name = 'driver' }) end
+    end
+
     local c = steerCam.cfg
     local dt = data.dt
     if dt < 1e-4 then dt = 1e-4 end
+
+    -- Camera options: FOV override + seat position offset. Applied first, so the
+    -- speed-vertigo FOV stacks on top of the override and offsets ride along.
+    if c.camEnable then
+      if c.camFov and data.res.fov then data.res.fov = c.camFov end
+      if (c.camFwd ~= 0 or c.camUp ~= 0) and data.veh ~= nil then
+        gFwd:set(data.veh:getDirectionVector())     -- car forward (world)
+        gUp:set(data.veh:getDirectionVectorUp())    -- car up (world)
+        gFwd:setScaled(c.camFwd or 0)
+        gUp:setScaled(c.camUp or 0)
+        data.res.pos:setAdd(gFwd)
+        data.res.pos:setAdd(gUp)
+      end
+      -- Pan/tilt gimbal (tripod/turret style): aim by azimuth (about WORLD up) +
+      -- elevation (about the horizontal-right), then rebuild with a LEVEL horizon.
+      -- So up/down is ALWAYS world-vertical (straight up/down), pan stays
+      -- horizontal, they're independent, and it can't curve at any pan amount.
+      if (c.camYaw or 0) ~= 0 or (c.camPitch or 0) ~= 0 then
+        gFwd:set(data.res.rot * vecY)                 -- current look direction
+        if (c.camYaw or 0) ~= 0 then
+          gFwd:set(quatFromAxisAngle(vecZup, rad(c.camYaw)) * gFwd)     -- azimuth; - = left
+        end
+        if (c.camPitch or 0) ~= 0 then
+          gRight:setCross(gFwd, vecZup); gRight:normalize()            -- horizontal right
+          gFwd:set(quatFromAxisAngle(gRight, rad(-(c.camPitch))) * gFwd) -- elevation; flipped
+        end
+        data.res.rot:setFromDir(gFwd, vecZup)         -- look at aimed dir, horizon level
+      end
+    end
 
     -- steerRaw is read regardless so the speed-roll can use it even when the
     -- steer-follow turn is disabled; the yaw itself respects steerEnable.
@@ -268,9 +367,11 @@ return function(...)
 
     -- ----- Speed modifiers: speed-driven FOV vertigo + corner roll -----------
     -- Both ramp to full strength as speed approaches speedRange (shared ceiling).
-    local spd = (data.vel and data.vel:length()) or 0
+    -- Speed is low-passed so tyre scrub/surge can't jitter the roll or FOV.
+    local spdRaw = (data.vel and data.vel:length()) or 0
+    self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * clamp01(dt * 3)
     local sr = (c.speedRange or 160) / 3.6            -- km/h -> m/s ceiling
-    local speedFac = clamp01(spd / (sr > 0.1 and sr or 0.1))
+    local speedFac = clamp01(self.spdSmooth / (sr > 0.1 and sr or 0.1))
     local modsOn = c.speedModEnable
 
     if modsOn and c.vertigo and data.res.fov then
@@ -290,24 +391,21 @@ return function(...)
       end
     end
 
+    -- roll amount = (min(speed, speedRange) / speedRange) * steering * rollAngle
+    -- steering: +1 = right, 0 = neutral, -1 = left.
     local rollTarget = 0
     if modsOn and c.speedRoll then
-      -- lean into the turn: steering input (normalized by the same reach
-      -- threshold as the yaw), scaled by speed, so it's invisible at low speed
-      -- and grows with steering as you approach the speed range.
-      local steerNorm = clampUnit(steerRaw / reachFrac)
-      rollTarget = rad(c.rollAngle or 0) * steerNorm * speedFac
+      rollTarget = rad(c.rollAngle or 0) * clampUnit(steerRaw) * speedFac
     end
     self.rollCur = self.rollCur + (rollTarget - self.rollCur) * clamp01(dt * 6)
-    if self.rollCur > 1e-4 or self.rollCur < -1e-4 then
-      -- roll around the view's own forward axis: middle euler arg = roll, and
-      -- post-multiplying applies it in the camera's local frame, so it's a true
-      -- roll at any heading/pitch (not a world-axis tilt that leaks into pitch).
-      -- Note: the destination must be the SECOND setMul2 arg (alias-safe); using
-      -- data.res.rot as the first arg corrupts it and makes the view wobble.
-      qtmp:setFromEuler(0, self.rollCur, 0)
-      qtmp:setMul2(data.res.rot, qtmp)   -- qtmp = rot * roll
-      data.res.rot:set(qtmp)
+    if modsOn and c.speedRoll then
+      -- Our own transform: rebuild the orientation with a LEVEL horizon rolled by
+      -- EXACTLY rollCur about the look axis. setFromDir(forward, up) discards the
+      -- stock camera's own (wobbling) cornering roll, so only our tilt remains and
+      -- the horizon is rock-steady level -- no roll wobble riding along on top.
+      gFwd:set(data.res.rot * vecY)                             -- look direction (roll axis)
+      gUp:set(quatFromAxisAngle(gFwd, -self.rollCur) * vecZup)  -- right turn -> lean right
+      data.res.rot:setFromDir(gFwd, gUp)
     end
   end
 

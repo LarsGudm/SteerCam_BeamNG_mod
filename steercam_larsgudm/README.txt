@@ -22,6 +22,10 @@ THE SETTINGS PANEL
 2. Find "SteerCam Settings", click it to drop it on screen, place/resize it.
 3. Click anywhere to leave edit mode.
 
+The per-app "Hide in cockpit view" checkbox works with SteerCam: any app with
+it ticked hides while the SteerCam view is active (SteerCam reports itself to the
+UI as a cockpit/"driver" view so the game's hide logic kicks in).
+
 Two profiles, selected with the buttons at the top:
 
   Default   Shown but LOCKED (greyed out) - you can't
@@ -33,6 +37,14 @@ Two profiles, selected with the buttons at the top:
             you open Custom it starts from the Default values.
 
 Controls (editable on Custom):
+  Camera settings override      (section) seat position, aim + FOV override
+  Forward          -0.5..0.5 m  move the seat forward (+) or back (-)
+  Up               -0.5..0.5 m  move the seat up (+) or down (-)
+  Rotate L/R        -45..45 deg aim the view right (+) or left (-)
+  Rotate U/D        -45..45 deg aim the view up (+) or down (-)
+  FOV               40-120 deg  field of view; overrides the camera's own FOV
+                                (def. 65). Speed vertigo stacks on top of this.
+
   Angle              0-90 deg   how far the view turns at full lock
   Steering range     10-100 %   how much steering reaches the full angle
                                 (e.g. 50% = fully turned by half-lock; lower =

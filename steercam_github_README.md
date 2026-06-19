@@ -10,6 +10,8 @@ camera, so it keeps all the normal interior behaviour (seat position, horizon,
 head-look) and doesn't replace or conflict with other camera mods.
 
 ## Features
+- **Camera** section: seat position offset (forward/back, up/down) and an FOV
+  override, all in one place (ETS2-style), with its own enable toggle.
 - Steering-linked "look into corner" yaw, layered on the stock driver camera.
 - **Blind-spot glance**: bindable keys to snap the view to a fixed left/right
   angle and back — hold to check, release to return (plus a toggle binding for
