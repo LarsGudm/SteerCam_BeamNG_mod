@@ -30,6 +30,13 @@ The "Enabled" checkbox at the top-right (next to the title) is the master switch
 for the whole mod: untick it and the camera reverts to the plain stock driver
 view (all SteerCam effects off) without changing your preset or saved settings.
 
+"Driver seat mirrors settings" (below the Presets row, on by default) treats your
+saved values as a LEFT-hand-drive seat and auto-mirrors the side-specific ones in
+right-hand-drive cars: the camera pan (Rotate L/R) flips, and the glance Left/
+Right angle + offset swap. Keybinds never flip -- the right glance still looks
+right, it just uses your left-side tuning. Turn it off to use your values as-is in
+every car.
+
 Profiles, picked from the "Presets" dropdown at the top:
 
   Default       LOCKED (read-only) - a simple, conservative baseline.

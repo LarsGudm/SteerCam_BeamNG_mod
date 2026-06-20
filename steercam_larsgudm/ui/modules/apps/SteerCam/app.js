@@ -10,6 +10,8 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}',
           '.steerCamApp .sc-mod-en{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#9a9aa0;cursor:pointer}',
           '.steerCamApp .sc-mod-en input{accent-color:#ff7a18;margin:0}',
+          '.steerCamApp .sc-mirror{display:flex;align-items:center;gap:7px;margin:0 0 8px;font-size:11px;color:#cfcfd4;cursor:pointer}',
+          '.steerCamApp .sc-mirror input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-presets{display:flex;gap:5px;margin-bottom:8px}',
           '.steerCamApp .sc-presets button{flex:1 1 0;background:rgba(255,255,255,0.08);color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);',
             'border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer}',
@@ -67,6 +69,8 @@ angular.module('beamng.apps')
             '</div>',
           '</div>',
         '</div>',
+
+        '<label class="sc-mirror"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Driver Seat mirrors settings</label>',
 
         '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-click="toggleCollapse(\'cam\')"><span class="sc-tw" ng-class="{open:!collapsed.cam}">▸</span>Camera settings override</span><input type="checkbox" ng-model="cfg.camEnable" ng-change="setEnable(\'cam\',\'camEnable\',cfg.camEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.cam" ng-class="{\'sc-off\':!cfg.camEnable}">',
@@ -178,6 +182,7 @@ angular.module('beamng.apps')
       scope.locked = true;
       scope.glanceSide = 'none';
       scope.modEnabled = true;   // global mod on/off (independent of preset lock)
+      scope.mirrorSeat = true;   // global: mirror side-specific settings on RHD cars
       // per-section twirl state; refreshed from each profile's enable flags on load
       scope.collapsed = { cam: false, steer: false, glance: false, speed: true };
       scope.openDD = null;   // which custom dropdown is open ('preset' | 'curve' | null)
@@ -209,6 +214,11 @@ angular.module('beamng.apps')
       // global mod on/off; works on any profile (not gated by the preset lock)
       scope.setMod = function (v) {
         bngApi.engineLua('if steerCam then steerCam.setEnabled(' + (v ? 'true' : 'false') + ') end');
+      };
+
+      // global driver-seat mirroring toggle (also independent of the preset lock)
+      scope.setMirror = function (v) {
+        bngApi.engineLua('if steerCam then steerCam.setMirror(' + (v ? 'true' : 'false') + ') end');
       };
       scope.cfg = {
         camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0,
@@ -271,6 +281,7 @@ angular.module('beamng.apps')
               if (cfg.preset) { scope.preset = cfg.preset; }
               scope.locked = (scope.preset !== 'Custom');
               if (typeof cfg.modEnabled === 'boolean') { scope.modEnabled = cfg.modEnabled; }
+              if (typeof cfg.mirrorSeat === 'boolean') { scope.mirrorSeat = cfg.mirrorSeat; }
               // disabled sections start collapsed; enabled ones start open
               scope.collapsed = {
                 cam: !scope.cfg.camEnable,

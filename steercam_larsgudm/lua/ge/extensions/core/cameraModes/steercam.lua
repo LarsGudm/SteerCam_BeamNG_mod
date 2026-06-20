@@ -190,6 +190,16 @@ if not steerCam then
     save("steerCam_enabled", steerCam.enabled)
   end
 
+  -- Driver-seat mirroring (global, default on). Saved values describe a LEFT-hand-
+  -- drive seat (the ground truth, since most cars are LHD). In a right-hand-drive
+  -- car we auto-flip the side-specific settings (camera pan + glance L/R) so the
+  -- feel is symmetric about the driver -- the input direction is never flipped.
+  steerCam.mirrorSeat = getBool("steerCam_mirrorSeat", true)
+  function steerCam.setMirror(v)
+    steerCam.mirrorSeat = (v == true or v == 1 or v == "true")
+    save("steerCam_mirrorSeat", steerCam.mirrorSeat)
+  end
+
   -- UI: switch active profile (presets are file-defined; only Custom is editable)
   function steerCam.setPreset(name)
     if name ~= "Custom" and not steerCam.presets[name] then name = "Default" end
@@ -229,6 +239,7 @@ if not steerCam then
     return {
       preset = steerCam.preset,
       modEnabled = steerCam.enabled,
+      mirrorSeat = steerCam.mirrorSeat,
       camEnable = a.camEnable, camFwd = a.camFwd, camUp = a.camUp,
       camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov, stableHorizon = a.stableHorizon,
       steerEnable = a.steerEnable,
@@ -370,15 +381,20 @@ end
 
 do
   local ex = rawget(_G, 'extensions')
-  if type(ex) == 'table' and type(ex.hook) == 'function' and not ex._steerCamCamWrap then
+  -- Guard with a stored function ref in _G, NOT a key on the `extensions` table:
+  -- the extension loader treated that key as a module name and logged "extension
+  -- unavailable: _steerCamCamWrap". Comparing the live hook against our stored
+  -- wrapper also re-wraps correctly if `extensions` ever reloads.
+  if type(ex) == 'table' and type(ex.hook) == 'function' and ex.hook ~= rawget(_G, '_steerCamExHook') then
     local origHook = ex.hook
-    ex.hook = function(evt, ...)
+    local wrapped = function(evt, ...)
       if evt == 'onCameraModeChanged' and select(1, ...) == 'steercam' then
         return origHook(evt, 'driver', select(2, ...))   -- forward remaining args intact
       end
       return origHook(evt, ...)
     end
-    ex._steerCamCamWrap = true
+    ex.hook = wrapped
+    rawset(_G, '_steerCamExHook', wrapped)
   end
 end
 
@@ -394,6 +410,7 @@ return function(...)
   o.rollCur   = 0   -- current smoothed speed-roll (rad)
   o.spdSmooth = 0   -- low-passed speed, so scrub/surge doesn't jitter the effects
   o._uiKeepAlive = 0   -- timer to reassert the cockpit-hide while active
+  o._rhd = nil   -- last-logged right-hand-drive flag (debug log throttle only)
 
   -- reset the reassert timer on any camera change so it fires again next frame
   o.onCameraChanged = function(self, focused)
@@ -419,6 +436,29 @@ return function(...)
     local c = steerCam.cfg
     local dt = data.dt
     if dt < 1e-4 then dt = 1e-4 end
+
+    -- Driver-seat mirroring: the saved values describe a LEFT-hand-drive seat; in
+    -- a right-hand-drive car we flip the side-specific ones (camera pan + glance
+    -- L/R) so the feel is symmetric about the driver. Input direction is never
+    -- flipped (the right glance still looks right). RHD is the same flag the stock
+    -- driver cam reads (core_camera.getDriverData), cached per vehicle.
+    -- Driver-seat mirroring: recompute EVERY frame (cheap -- the stock driver cam
+    -- calls getDriverData every frame too), so switching vehicles updates the
+    -- mirror immediately with no Ctrl+L. RHD = the vehicle's onboard.driver camera
+    -- flag (same one the stock cam uses for look-back). Seat-node geometry was
+    -- unreliable (some cars centre the cam node); the earlier "mirrored an LHD car"
+    -- was a false alarm -- that car was actually RHD, so the flag had been right.
+    local rhd = false
+    if data.veh ~= nil and core_camera and core_camera.getDriverData then
+      local _, isRHD = core_camera.getDriverData(data.veh)
+      rhd = (isRHD == true)
+    end
+    if rhd ~= self._rhd then        -- (debug) log only when it changes
+      self._rhd = rhd
+      log('I', 'steercam', 'rhd=' .. tostring(rhd)
+          .. ' veh=' .. tostring(data.veh and data.veh.getJBeamFilename and data.veh:getJBeamFilename()))
+    end
+    local mirrored = steerCam.mirrorSeat and rhd
 
     -- Camera options: FOV override + seat position offset. Applied first, so the
     -- speed-vertigo FOV stacks on top of the override and offsets ride along.
@@ -447,7 +487,8 @@ return function(...)
       if data.veh ~= nil or (c.camYaw or 0) ~= 0 or (c.camPitch or 0) ~= 0 then
         gFwd:set(data.res.rot * vecY)                 -- current look direction
         if (c.camYaw or 0) ~= 0 then
-          gFwd:set(quatFromAxisAngle(vecZup, rad(c.camYaw)) * gFwd)     -- azimuth; - = left
+          local camYaw = mirrored and -(c.camYaw) or c.camYaw   -- flip pan for a RHD seat
+          gFwd:set(quatFromAxisAngle(vecZup, rad(camYaw)) * gFwd) -- azimuth; - = left
         end
         if (c.camPitch or 0) ~= 0 then
           gRight:setCross(gFwd, vecZup); gRight:normalize()            -- horizontal right
@@ -546,11 +587,18 @@ return function(...)
     local desired = 0
     if side ~= 0 then
       desired = 1
-      -- side: left = +1, right = -1. Positive yaw turns the view right, so the
-      -- left glance is negative. The lean leans toward the side you look at:
-      -- left = -X (car left), right = +X (car right).
-      self.glanceYaw = (side > 0) and -rad(c.glanceLeft or 0) or rad(c.glanceRight or 0)
-      self.glanceLat = (side > 0) and -(c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
+      -- side: left = +1, right = -1. The DIRECTION always follows the input (left
+      -- input looks/leans left = negative), but the magnitude comes from that
+      -- side's settings -- swapped L<->R when mirroring a right-hand-drive seat, so
+      -- e.g. the right glance keybind still looks right but uses the left settings.
+      local leftInput = side > 0
+      local useLeft = leftInput
+      if mirrored then useLeft = not useLeft end
+      local gAngle  = useLeft and (c.glanceLeft or 0)       or (c.glanceRight or 0)
+      local gOffset = useLeft and (c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
+      local dir = leftInput and -1 or 1
+      self.glanceYaw = dir * rad(gAngle)
+      self.glanceLat = dir * gOffset
     end
     -- glance amount: timed tween 0<->1 over glanceTime, through the chosen curve
     if desired ~= self.glanceTargetVal then          -- (re)start on engage/release
