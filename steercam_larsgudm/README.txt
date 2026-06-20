@@ -96,6 +96,8 @@ Controls (editable on Custom):
                                 negative to lean/pull back the other way
   Right offset    -0.5..0.5 m   same for the right glance (def. 0.10)
 
+Hover any category name or setting label for a short description of what it does.
+
 Each category header has a twirl and a checkbox on the right: click the category
 NAME to collapse/expand it, click the CHECKBOX to turn the feature on/off.
 Disabling a category auto-collapses it; re-enabling leaves it collapsed (click
