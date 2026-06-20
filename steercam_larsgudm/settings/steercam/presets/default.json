@@ -8,6 +8,7 @@
   "camYaw": 0.0,
   "camPitch": 0.0,
   "camFov": 65.0,
+  "stableHorizon": 0.0,
 
   "steerEnable": true,
   "angle": 18.0,
@@ -18,6 +19,7 @@
   "reverseTime": 500.0,
   "speedFade": false,
   "fadeSpeed": 30.0,
+  "fadeFloor": 0.0,
 
   "glanceEnable": true,
   "glanceLeft": 115.0,
@@ -27,7 +29,7 @@
   "glanceOffsetRight": 0.10,
   "glanceCurve": "Exponential",
 
-  "speedModEnable": true,
+  "speedModEnable": false,
   "vertigo": false,
   "vertigoFov": 12.0,
   "vertigoDolly": 0.30,

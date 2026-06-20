@@ -8,6 +8,7 @@
   "camYaw": 0.0,
   "camPitch": 0.0,
   "camFov": 65.0,
+  "stableHorizon": 0.0,
 
   "steerEnable": true,
   "angle": 18.0,
@@ -18,6 +19,7 @@
   "reverseTime": 500.0,
   "speedFade": true,
   "fadeSpeed": 30.0,
+  "fadeFloor": 0.0,
 
   "glanceEnable": true,
   "glanceLeft": 115.0,

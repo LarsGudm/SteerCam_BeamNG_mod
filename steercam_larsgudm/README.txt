@@ -26,6 +26,10 @@ The per-app "Hide in cockpit view" checkbox works with SteerCam: any app with
 it ticked hides while the SteerCam view is active (SteerCam reports itself to the
 UI as a cockpit/"driver" view so the game's hide logic kicks in).
 
+The "Enabled" checkbox at the top-right (next to the title) is the master switch
+for the whole mod: untick it and the camera reverts to the plain stock driver
+view (all SteerCam effects off) without changing your preset or saved settings.
+
 Profiles, picked from the "Presets" dropdown at the top:
 
   Default       LOCKED (read-only) - a simple, conservative baseline.
@@ -45,6 +49,11 @@ Controls (editable on Custom):
   Vertical Offset  -0.5..0.5 m  move the seat up (+) or down (-)
   Rotate L/R        -45..45 deg pan the view (gimbal): - = left, + = right
   Rotate D/U        -45..45 deg tilt the view (gimbal): always world-vertical
+  Horizon lock       0-100 %    how much the horizon stays level vs. banks with
+                                the car (NASCAR banking, off-camber turns). 0
+                                (def.) = banks fully with the car; 100 = stays
+                                level (eases off on steep banks). Same as the
+                                game's "Lock roll to horizon" camera option.
   FOV               40-120 deg  field of view; overrides the camera's own FOV
                                 (def. 65). Speed vertigo stacks on top of this.
 
@@ -54,7 +63,10 @@ Controls (editable on Custom):
                                 (e.g. 50% = fully turned by half-lock; lower =
                                 more reactive to small steering inputs)
   Stiffness          1-40       transition speed; higher = snappier
-  Mirror turn ...reversing      while reversing, mirror the turn the other way
+  Mirror turn ...reversing      while reversing, mirror the turn the other way.
+                                Direction follows your speed; at a near standstill
+                                (<1 km/h) it follows the gear instead, so it flips
+                                the moment you shift to/from reverse.
   Reverse angle      0-90 deg   its own angle while reversing (def. 9)
   Reverse blend      0-1000 ms  how slowly it eases between forward/reverse
                                 (buffers spin-outs; def. 500)
@@ -62,22 +74,29 @@ Controls (editable on Custom):
                                 speed; on = none when stopped, ramps to full by
                                 Fade speed)
   Fade speed         5-150 km/h (only shown when fade is on; def. 30)
+  Standstill turn    0-100 %    (fade on) how much of the turn is kept even when
+                                stopped; the rest ramps in by Fade speed. 0
+                                (def.) = no turn until moving. e.g. 10% lets you
+                                see a bit of steer lean while parked.
 
   Left angle         0-170 deg  blind-spot glance angle to the left (def. 115)
   Right angle        0-170 deg  blind-spot glance angle to the right (def. 115)
   Glance time        0-500 ms   how fast a glance snaps in/out (0 = instant)
   Glance curve                  easing curve (dropdown): Exponential (native) /
                                 Linear / S-curve / Ease1 / Ease2
-  Left offset        0-0.6 m    lean left when glancing left (def. 0.10) - bump
-                                it up if the view clips into the seat
-  Right offset       0-0.6 m    lean right when glancing right (def. 0.10)
+  Left offset     -0.5..0.5 m   lean toward the side you glance (def. 0.10) -
+                                bump it up if the view clips into the seat; go
+                                negative to lean/pull back the other way
+  Right offset    -0.5..0.5 m   same for the right glance (def. 0.10)
 
-Each category header ("Steer camera turn", "Blind-spot glance", "Speed
-modifiers") has an enable checkbox. Unticking a header turns that whole feature
-off (the glance keybinds keep existing, they just do nothing while it's off).
+Each category header has a twirl and a checkbox on the right: click the category
+NAME to collapse/expand it, click the CHECKBOX to turn the feature on/off.
+Disabling a category auto-collapses it; re-enabling leaves it collapsed (click
+the name to open it). Unticking a category turns that whole feature off (the
+glance keybinds keep existing, they just do nothing while it's off).
 
 Speed modifiers (mostly for fun, scale with speed; SteerCam view only):
-  Speed modifiers               master enable for this section
+  Speed modifiers               master enable for this section (off by default)
   Speed vertigo (FOV)           widen the FOV as you go faster, with a matching
                                 forward dolly (the dolly-zoom "vertigo" warp)
   FOV change         0-40 deg   max extra FOV reached at the speed range
@@ -86,7 +105,9 @@ Speed modifiers (mostly for fun, scale with speed; SteerCam view only):
                                 higher pins more distant things but moves the
                                 camera forward more
   Speed camera roll             lean into the turn from steering input; hidden
-                                at low speed, grows as you near the speed range
+                                at low speed, grows as you near the speed range.
+                                Leans the camera-override horizon (keeps the bank,
+                                doesn't flatten it or add up/down sway)
   Roll change        0-20 deg   max lean angle (full steering at the speed range)
   Speed range        20-400     km/h at which BOTH effects reach full strength
                                 (def. 160; shared ceiling)

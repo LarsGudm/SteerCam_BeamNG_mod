@@ -41,12 +41,12 @@ if not steerCam then
   -- load, the base sanitizePreset fills missing keys from, and the seed for the
   -- Custom profile. The shipped default.json mirrors this for the dropdown entry.
   steerCam.defaults = {
-    camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0,
+    camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0,
     steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
-    reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0,
+    reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0, fadeFloor = 0.0,
     glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceTime = 120.0,
     glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceCurve = "Exponential",
-    speedModEnable = true, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
+    speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
     speedRoll = false, rollAngle = 5.0, speedRange = 160.0,
   }
 
@@ -57,11 +57,11 @@ if not steerCam then
     camUp = {-0.5, 0.5},
     camYaw = {-45, 45},
     camPitch = {-45, 45},
-    camFov = {40, 120},
-    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150},
+    camFov = {40, 120}, stableHorizon = {0, 100},
+    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150}, fadeFloor = {0, 100},
     reverseAngle = {0, 90}, reverseTime = {0, 3000},
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
-    glanceOffsetLeft = {0, 0.6}, glanceOffsetRight = {0, 0.6},
+    glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5},
     vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
   }
   local bools  = {
@@ -147,6 +147,7 @@ if not steerCam then
     camYaw     = getNum("steerCam_custom_camYaw",     steerCam.defaults.camYaw),
     camPitch   = getNum("steerCam_custom_camPitch",   steerCam.defaults.camPitch),
     camFov     = getNum("steerCam_custom_camFov",     steerCam.defaults.camFov),
+    stableHorizon = getNum("steerCam_custom_stableHorizon", steerCam.defaults.stableHorizon),
     steerEnable = getBool("steerCam_custom_steerEnable", steerCam.defaults.steerEnable),
     angle      = getNum("steerCam_custom_angle",       steerCam.defaults.angle),
     reach      = getNum("steerCam_custom_reach",       steerCam.defaults.reach),
@@ -156,6 +157,7 @@ if not steerCam then
     reverseTime  = getNum("steerCam_custom_reverseTime",   steerCam.defaults.reverseTime),
     speedFade  = getBool("steerCam_custom_speedFade",  steerCam.defaults.speedFade),
     fadeSpeed  = getNum("steerCam_custom_fadeSpeed",   steerCam.defaults.fadeSpeed),
+    fadeFloor  = getNum("steerCam_custom_fadeFloor",   steerCam.defaults.fadeFloor),
     glanceEnable = getBool("steerCam_custom_glanceEnable", steerCam.defaults.glanceEnable),
     glanceLeft  = getNum("steerCam_custom_glanceLeft",   steerCam.defaults.glanceLeft),
     glanceRight = getNum("steerCam_custom_glanceRight",  steerCam.defaults.glanceRight),
@@ -179,6 +181,14 @@ if not steerCam then
   end
   steerCam.preset = getStr("steerCam_preset", "Default")
   steerCam.cfg = resolveCfg(steerCam.preset)
+
+  -- Global mod on/off (independent of the preset; persists). When off, the camera
+  -- behaves like the stock driver cam -- every SteerCam effect below is skipped.
+  steerCam.enabled = getBool("steerCam_enabled", true)
+  function steerCam.setEnabled(v)
+    steerCam.enabled = (v == true or v == 1 or v == "true")
+    save("steerCam_enabled", steerCam.enabled)
+  end
 
   -- UI: switch active profile (presets are file-defined; only Custom is editable)
   function steerCam.setPreset(name)
@@ -218,12 +228,13 @@ if not steerCam then
     local a = steerCam.cfg
     return {
       preset = steerCam.preset,
+      modEnabled = steerCam.enabled,
       camEnable = a.camEnable, camFwd = a.camFwd, camUp = a.camUp,
-      camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov,
+      camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov, stableHorizon = a.stableHorizon,
       steerEnable = a.steerEnable,
       angle = a.angle, reach = a.reach, stiffness = a.stiffness,
       reverseSteer = a.reverseSteer, reverseAngle = a.reverseAngle, reverseTime = a.reverseTime,
-      speedFade = a.speedFade, fadeSpeed = a.fadeSpeed,
+      speedFade = a.speedFade, fadeSpeed = a.fadeSpeed, fadeFloor = a.fadeFloor,
       glanceEnable = a.glanceEnable,
       glanceLeft = a.glanceLeft, glanceRight = a.glanceRight, glanceTime = a.glanceTime,
       glanceOffsetLeft = a.glanceOffsetLeft, glanceOffsetRight = a.glanceOffsetRight,
@@ -402,6 +413,9 @@ return function(...)
       if guihooks then guihooks.trigger('onCameraNameChanged', { name = 'driver' }) end
     end
 
+    -- Mod globally disabled -> leave the stock driver result untouched.
+    if not steerCam.enabled then return end
+
     local c = steerCam.cfg
     local dt = data.dt
     if dt < 1e-4 then dt = 1e-4 end
@@ -418,11 +432,19 @@ return function(...)
         data.res.pos:setAdd(gFwd)
         data.res.pos:setAdd(gUp)
       end
-      -- Pan/tilt gimbal (tripod/turret style): aim by azimuth (about WORLD up) +
-      -- elevation (about the horizontal-right), then rebuild with a LEVEL horizon.
-      -- So up/down is ALWAYS world-vertical (straight up/down), pan stays
-      -- horizontal, they're independent, and it can't curve at any pan amount.
-      if (c.camYaw or 0) ~= 0 or (c.camPitch or 0) ~= 0 then
+      -- Orientation rebuild: re-aim (pan/tilt) AND set the roll/up. This runs
+      -- whenever there's a vehicle, so the roll ALWAYS applies -- not only when a
+      -- pan/tilt value is set (that gating was why the bank + horizon slider "did
+      -- nothing" with yaw/pitch at 0, falling back to the stock world-up rotation).
+      -- Pan/tilt gimbal (tripod/turret): aim by azimuth (about WORLD up) + elevation
+      -- (about the horizontal-right) -- up/down stays world-vertical, pan stays
+      -- horizontal, independent, no curve. The rebuild's UP is the CAR's up (seat
+      -- up) by default, so the horizon BANKS WITH THE CAR (NASCAR banking, off-
+      -- camber turns). "Lock roll to horizon" (stableHorizon, copied 1:1 from the
+      -- stock cam's cameraDriverStableHorizon) blends it back toward world-level,
+      -- easing off the more the car is banked. setFromDir keeps the forward exactly,
+      -- so only the roll changes.
+      if data.veh ~= nil or (c.camYaw or 0) ~= 0 or (c.camPitch or 0) ~= 0 then
         gFwd:set(data.res.rot * vecY)                 -- current look direction
         if (c.camYaw or 0) ~= 0 then
           gFwd:set(quatFromAxisAngle(vecZup, rad(c.camYaw)) * gFwd)     -- azimuth; - = left
@@ -431,7 +453,22 @@ return function(...)
           gRight:setCross(gFwd, vecZup); gRight:normalize()            -- horizontal right
           gFwd:set(quatFromAxisAngle(gRight, rad(-(c.camPitch))) * gFwd) -- elevation; flipped
         end
-        data.res.rot:setFromDir(gFwd, vecZup)         -- look at aimed dir, horizon level
+        if data.veh ~= nil then
+          gUp:set(data.veh:getDirectionVectorUp())    -- car/seat up (world)
+          local sh = (c.stableHorizon or 0) / 100     -- 0..1 (0 = full bank, default)
+          if sh > 0 then
+            -- carRollFactor: 1 = follow car roll fully, 0 = dead level. The stock
+            -- formula keeps more roll the steeper the bank (small up.z).
+            local f = 1 - sh * smootheststep(clamp01(1.42 * gUp.z))
+            gUp:setScaled(f)                          -- f * carUp
+            gRight:set(vecZup); gRight:setScaled(1 - f)  -- (1-f) * worldUp
+            gUp:setAdd(gRight)                        -- blended up
+            gUp:normalize()
+          end
+          data.res.rot:setFromDir(gFwd, gUp)
+        else
+          data.res.rot:setFromDir(gFwd, vecZup)       -- no vehicle: fall back to level
+        end
       end
     end
 
@@ -449,10 +486,27 @@ return function(...)
     -- while reversing (velocity opposes forward), blend toward the mirrored turn
     -- over reverseTime (anim curve like the glance). Smooths the low-speed kick-in
     -- AND buffers spin-outs where the velocity briefly flips direction.
+    -- Reverse target: the SPEED vector decides whenever we're clearly moving
+    -- (faster than ~1 km/h either way). Near a standstill the gear decides intent
+    -- instead -- reverse gear -> reverse, a forward gear -> forward, park/neutral
+    -- -> hold the current state. (steerCamGear is fed from the vehicle VM:
+    -- -1 reverse / 0 neutral|park / +1 forward.)
     local revTarget = 0
     if c.reverseSteer and data.vel ~= nil and data.veh ~= nil then
       gFwd:set(data.veh:getDirectionVector())
-      if data.vel:dot(gFwd) < -0.05 then revTarget = 1 end   -- ~0.18 km/h: near-instant
+      local fwdSpeed = data.vel:dot(gFwd)          -- m/s along the car's forward
+      local nzSpd = 1 / 3.6                         -- 1 km/h dead-zone for the speed test
+      if fwdSpeed < -nzSpd then
+        revTarget = 1                              -- clearly rolling backward
+      elseif fwdSpeed > nzSpd then
+        revTarget = 0                              -- clearly rolling forward
+      else                                          -- near standstill: let the gear decide
+        local vid = data.veh.getID and data.veh:getID() or nil
+        local gdir = (vid ~= nil and steerCamGear ~= nil) and steerCamGear[vid] or 0
+        if gdir == -1 then revTarget = 1
+        elseif gdir == 1 then revTarget = 0
+        else revTarget = self.reverseTargetVal end  -- park/neutral: keep current
+      end
     end
     if revTarget ~= self.reverseTargetVal then       -- (re)start the tween on a flip
       self.reverseFrom = self.reverseBlend
@@ -473,7 +527,11 @@ return function(...)
     if c.speedFade then
       local spd = (data.vel and data.vel:length()) or 0
       local fadeMs = (c.fadeSpeed or 30) / 3.6     -- km/h -> m/s
-      yawTarget = yawTarget * clamp01(spd / (fadeMs > 0.1 and fadeMs or 0.1))
+      local ramp = clamp01(spd / (fadeMs > 0.1 and fadeMs or 0.1))
+      -- fadeFloor: a % of the full turn that's allowed even at a standstill; the
+      -- rest ramps in by fadeSpeed. 0 (default) = original "no turn until moving".
+      local floor = (c.fadeFloor or 0) / 100
+      yawTarget = yawTarget * (floor + (1 - floor) * ramp)
     end
     self.steerYaw = self.steerYaw + (yawTarget - self.steerYaw) * clamp01(dt * c.stiffness)
 
@@ -560,13 +618,30 @@ return function(...)
     end
     self.rollCur = self.rollCur + (rollTarget - self.rollCur) * clamp01(dt * 6)
     if modsOn and c.speedRoll then
-      -- Our own transform: rebuild the orientation with a LEVEL horizon rolled by
-      -- EXACTLY rollCur about the look axis. setFromDir(forward, up) discards the
-      -- stock camera's own (wobbling) cornering roll, so only our tilt remains and
-      -- the horizon is rock-steady level -- no roll wobble riding along on top.
-      gFwd:set(data.res.rot * vecY)                             -- look direction (roll axis)
-      gUp:set(quatFromAxisAngle(gFwd, -self.rollCur) * vecZup)  -- right turn -> lean right
-      data.res.rot:setFromDir(gFwd, gUp)
+      -- IMPORTANT: roll with OUR OWN vectors via a clean setFromDir REBUILD -- never
+      -- by composing the roll on top of the incoming orientation. Multiplying a roll
+      -- onto data.res.rot drags the stock driver cam's own cornering roll/pitch
+      -- wobble along, which reads as the camera gently swaying up/down (a long-
+      -- standing bug). So we pick a STABLE base "up" ourselves and rebuild from it:
+      -- the SAME banked + horizon-locked up the camera override uses (so the lean
+      -- rides the same horizon and keeps the car bank), or world-level when the
+      -- override is off. Then lean that base by rollCur about the look axis
+      -- (vecY = forward = the roll axis) and setFromDir. Stable like the old world-up
+      -- rebuild, but it no longer flattens the bank.
+      gFwd:set(data.res.rot * vecY)                            -- look direction (roll axis)
+      if c.camEnable and data.veh ~= nil then
+        gUp:set(data.veh:getDirectionVectorUp())              -- car/seat up: stable, banked
+        local sh = (c.stableHorizon or 0) / 100
+        if sh > 0 then                                        -- mirror the override's blend
+          local f = 1 - sh * smootheststep(clamp01(1.42 * gUp.z))
+          gUp:setScaled(f); gRight:set(vecZup); gRight:setScaled(1 - f)
+          gUp:setAdd(gRight); gUp:normalize()
+        end
+      else
+        gUp:set(vecZup)                                       -- override off: level base
+      end
+      gUp:set(quatFromAxisAngle(gFwd, -self.rollCur) * gUp)   -- lean the base up by rollCur
+      data.res.rot:setFromDir(gFwd, gUp)                      -- clean rebuild, our own transform
     end
   end
 
