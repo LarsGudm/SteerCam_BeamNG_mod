@@ -148,6 +148,7 @@ angular.module('beamng.apps')
     replace: true,
     restrict: 'EA',
     link: function (scope, element, attrs) {
+      // fallback list; replaced by the real (file-scanned) list once Lua answers
       scope.presetNames = ['Default', "Dev's Preset", 'Custom'];
       scope.preset = 'Default';
       scope.locked = true;
@@ -201,7 +202,24 @@ angular.module('beamng.apps')
         });
       }
 
+      // pull the file-scanned preset list (bundled + user-dropped .json files)
+      function loadPresetNames() {
+        bngApi.engineLua('steerCam and steerCam.getPresetNames() or nil', function (names) {
+          if (!names) { return; }
+          var arr = [];
+          if (Object.prototype.toString.call(names) === '[object Array]') {
+            arr = names.slice();
+          } else if (typeof names === 'object') {
+            for (var k in names) { if (names.hasOwnProperty(k)) { arr.push(names[k]); } }
+          }
+          if (arr.length) {
+            scope.$evalAsync(function () { scope.presetNames = arr; });
+          }
+        });
+      }
+
       function load() {
+        loadPresetNames();
         bngApi.engineLua('steerCam and steerCam.getCfg() or nil', function (cfg) {
           if (cfg && typeof cfg === 'object') {
             scope.$evalAsync(function () {

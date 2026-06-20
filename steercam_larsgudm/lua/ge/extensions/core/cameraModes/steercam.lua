@@ -6,10 +6,12 @@
 -- pointed. Enable in Options -> Camera -> Switching order (tick "Driversteer"),
 -- press C. Adjust from the "SteerCam Settings" UI app.
 --
--- Two profiles:
---   Default : fixed values, locked (read-only) in the UI.
---   Custom  : your own saved values, editable. Persists independently, so it
---             remembers your tweaks even after switching to Default and back.
+-- Profiles:
+--   File presets : every *.json in /settings/steercam/presets/ becomes a
+--                  read-only preset (Default + Dev's Preset ship with the mod).
+--                  Drop another .json in that folder to add your own.
+--   Custom       : your own saved values, editable. Persists independently, so
+--                  it remembers your tweaks even after switching presets.
 -- ----------------------------------------------------------------------------
 
 if not steerCam then
@@ -35,8 +37,9 @@ if not steerCam then
   end
   local function clampv(x, lo, hi) return x < lo and lo or (x > hi and hi or x) end
 
-  -- The Default profile (simple baseline; fixed, never written to).
-  -- Inline on purpose (no external file load) -- reliability over tidiness.
+  -- Baseline values. Kept inline as the guaranteed fallback if no preset files
+  -- load, the base sanitizePreset fills missing keys from, and the seed for the
+  -- Custom profile. The shipped default.json mirrors this for the dropdown entry.
   steerCam.defaults = {
     camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0,
     steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
@@ -46,6 +49,95 @@ if not steerCam then
     speedModEnable = true, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
     speedRoll = false, rollAngle = 5.0, speedRange = 160.0,
   }
+
+  -- Setting metadata: numeric ranges (clamped), booleans, and string-valued keys.
+  -- Shared by sanitizePreset (file loads) and steerCam.set (Custom edits).
+  local ranges = {
+    camFwd = {-0.5, 0.5},
+    camUp = {-0.5, 0.5},
+    camYaw = {-45, 45},
+    camPitch = {-45, 45},
+    camFov = {40, 120},
+    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150},
+    reverseAngle = {0, 90}, reverseTime = {0, 3000},
+    glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
+    glanceOffsetLeft = {0, 0.6}, glanceOffsetRight = {0, 0.6},
+    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
+  }
+  local bools  = {
+    speedFade = true, vertigo = true, speedRoll = true,
+    camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
+    reverseSteer = true,
+  }
+  local strs = { glanceCurve = true }   -- string-valued settings
+
+  -- Build a clean cfg from a decoded preset file: start from Default, then copy
+  -- over any KNOWN key (correct type; numbers clamped to range). Unknown keys are
+  -- ignored and missing keys keep the Default, so partial/old files stay valid.
+  local function sanitizePreset(raw)
+    local cfg = {}
+    for k, v in pairs(steerCam.defaults) do cfg[k] = v end
+    if type(raw) == "table" then
+      for k in pairs(steerCam.defaults) do
+        local rv = raw[k]
+        if rv ~= nil then
+          if bools[k] then
+            cfg[k] = (rv == true or rv == 1 or rv == "true")
+          elseif strs[k] then
+            cfg[k] = tostring(rv)
+          else
+            local n = tonumber(rv)
+            if n ~= nil then
+              local r = ranges[k]
+              if r then n = clampv(n, r[1], r[2]) end
+              cfg[k] = n
+            end
+          end
+        end
+      end
+    end
+    return cfg
+  end
+
+  -- Scan the presets folder and load every *.json as a read-only preset -- the
+  -- same FS:findFiles + jsonReadFile pattern the game uses for campaigns etc. The
+  -- virtual filesystem overlays the mod's bundled presets AND any files the user
+  -- drops in <userfolder>/settings/steercam/presets/, so both appear here.
+  steerCam.presetsDir = "/settings/steercam/presets/"
+  function steerCam.loadPresets()
+    local presets, meta, order = {}, {}, {}   -- name->cfg, name->sortKey, [names]
+    local files = (FS and FS.findFiles) and FS:findFiles(steerCam.presetsDir, "*.json", 0, false, false) or {}
+    for _, file in ipairs(files) do
+      local raw = jsonReadFile(file)
+      if type(raw) == "table" then
+        local name = (type(raw.name) == "string" and raw.name ~= "") and raw.name or nil
+        if not name then
+          local _, fn = path.splitWithoutExt(file)   -- fall back to the filename
+          name = fn
+        end
+        if name and name ~= "Custom" and not presets[name] then
+          presets[name] = sanitizePreset(raw)
+          meta[name]    = tonumber(raw.order) or 100
+          order[#order + 1] = name
+        end
+      end
+    end
+    -- Default always exists (synthesized from the inline table if no file loads)
+    -- and is always pinned to the top of the list.
+    if not presets["Default"] then
+      presets["Default"] = sanitizePreset(steerCam.defaults)
+      order[#order + 1] = "Default"
+    end
+    meta["Default"] = -math.huge
+    table.sort(order, function(a, b)
+      local oa, ob = meta[a] or 100, meta[b] or 100
+      if oa ~= ob then return oa < ob end
+      return a < b
+    end)
+    steerCam.presets     = presets
+    steerCam.presetOrder = order
+  end
+  steerCam.loadPresets()
 
   -- The Custom profile (editable; starts as a copy of Default, then persists).
   steerCam.custom = {
@@ -80,48 +172,27 @@ if not steerCam then
     speedRange = getNum("steerCam_custom_speedRange",  steerCam.defaults.speedRange),
   }
 
-  -- Dev's Preset: a fixed "immersion" preset = Default + feel tweaks (read-only).
-  steerCam.dev = {}
-  for k, v in pairs(steerCam.defaults) do steerCam.dev[k] = v end
-  steerCam.dev.speedFade    = true
-  steerCam.dev.reverseSteer = true
-  steerCam.dev.vertigo      = true
-  steerCam.dev.speedRoll    = true
-  steerCam.dev.glanceCurve  = "Ease2"
-
+  -- steerCam.cfg points at whichever profile is active (the camera reads this).
+  local function resolveCfg(name)
+    if name == "Custom" then return steerCam.custom end
+    return steerCam.presets[name] or steerCam.presets["Default"] or steerCam.defaults
+  end
   steerCam.preset = getStr("steerCam_preset", "Default")
-  -- steerCam.cfg points at whichever profile is active (the camera reads this)
-  steerCam.cfg = (steerCam.preset == "Custom") and steerCam.custom
-              or (steerCam.preset == "Dev's Preset") and steerCam.dev
-              or steerCam.defaults
+  steerCam.cfg = resolveCfg(steerCam.preset)
 
-  local ranges = {
-    camFwd = {-0.5, 0.5}, 
-    camUp = {-0.5, 0.5}, 
-    camYaw = {-45, 45}, 
-    camPitch = {-45, 45}, 
-    camFov = {40, 120},
-    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150},
-    reverseAngle = {0, 90}, reverseTime = {0, 3000},
-    glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
-    glanceOffsetLeft = {0, 0.6}, glanceOffsetRight = {0, 0.6},
-    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
-  }
-  local bools  = {
-    speedFade = true, vertigo = true, speedRoll = true,
-    camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
-    reverseSteer = true,
-  }
-  local strs = { glanceCurve = true }   -- string-valued settings
-
-  -- UI: switch active profile
+  -- UI: switch active profile (presets are file-defined; only Custom is editable)
   function steerCam.setPreset(name)
-    if name ~= "Custom" and name ~= "Dev's Preset" then name = "Default" end
+    if name ~= "Custom" and not steerCam.presets[name] then name = "Default" end
     steerCam.preset = name
-    steerCam.cfg = (name == "Custom") and steerCam.custom
-                or (name == "Dev's Preset") and steerCam.dev
-                or steerCam.defaults
+    steerCam.cfg = resolveCfg(name)
     save("steerCam_preset", name)
+  end
+
+  -- Re-scan the presets folder at runtime (console: steerCam.reloadPresets()).
+  -- Re-resolves the active cfg so a removed/renamed preset falls back cleanly.
+  function steerCam.reloadPresets()
+    steerCam.loadPresets()
+    steerCam.setPreset(steerCam.preset)
   end
 
   -- UI: edit a Custom value (Default is never modified)
@@ -161,6 +232,14 @@ if not steerCam then
       vertigo = a.vertigo, vertigoFov = a.vertigoFov, vertigoDolly = a.vertigoDolly,
       speedRoll = a.speedRoll, rollAngle = a.rollAngle, speedRange = a.speedRange,
     }
+  end
+
+  -- UI: the ordered preset list for the dropdown (Custom pinned last)
+  function steerCam.getPresetNames()
+    local names = {}
+    for _, n in ipairs(steerCam.presetOrder or {}) do names[#names + 1] = n end
+    names[#names + 1] = "Custom"
+    return names
   end
 
   -- ----- Blind-spot glance runtime ------------------------------------------

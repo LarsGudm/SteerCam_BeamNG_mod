@@ -26,12 +26,14 @@ The per-app "Hide in cockpit view" checkbox works with SteerCam: any app with
 it ticked hides while the SteerCam view is active (SteerCam reports itself to the
 UI as a cockpit/"driver" view so the game's hide logic kicks in).
 
-Three profiles, picked from the "Presets" dropdown at the top:
+Profiles, picked from the "Presets" dropdown at the top:
 
   Default       LOCKED (read-only) - a simple, conservative baseline.
 
   Dev's Preset  LOCKED (read-only) - a tuned "immersion" set (steer fade,
                 reverse mirror, speed vertigo + roll, softer glance easing).
+
+  (more)        Any extra presets found on disk - see ADDING PRESETS below.
 
   Custom        Your own profile. Pick it to unlock the controls and edit. Your
                 changes are saved separately, so you can switch presets and back
@@ -112,11 +114,38 @@ Tuning the angles: open the panel, switch to Custom, click "Preview left" or
 it feels right. Click the preview button again to release.
 
 
+ADDING PRESETS
+--------------
+Presets are plain .json files. The mod ships Default + Dev's Preset; any other
+.json found in the presets folder shows up in the dropdown automatically (read-
+only, like the built-ins).
+
+To add your own without unzipping the mod, create this folder in your BeamNG
+User Folder and drop a .json in it:
+
+  settings/steercam/presets/mypreset.json
+
+Easiest start: copy the shipped default.json (inside the mod's
+settings/steercam/presets/), rename it, and edit. Format:
+
+  - "name"  : what shows in the dropdown (e.g. "Track day"). If omitted, the
+              filename is used. Don't use "Custom" - that name is reserved.
+  - "order" : optional number for sort position (lower = higher in the list).
+  - Any setting key you want to change (same names the panel uses). Keys you
+    leave out fall back to Default; out-of-range numbers are clamped; unknown
+    keys are ignored - so a partial file is perfectly fine.
+
+After adding/editing files, either reload the game UI (Ctrl+L) or run
+  steerCam.reloadPresets()
+in the console (~) to re-scan without a restart.
+
+
 WHAT'S INSIDE
 -------------
-  lua/ge/extensions/core/cameraModes/steercam.lua    the camera + config + presets
+  lua/ge/extensions/core/cameraModes/steercam.lua    the camera + config loader
   lua/ge/extensions/core/input/actions/steercam.json    glance key bindings
   lua/vehicle/extensions/auto/steerCamFeed.lua          feeds steering to GE
+  settings/steercam/presets/*.json                      the bundled presets
   ui/modules/apps/SteerCam/                             the settings panel app
 
 
