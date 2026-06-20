@@ -22,6 +22,19 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-row{display:flex;align-items:center;gap:7px;margin:5px 0}',
           '.steerCamApp .sc-row>span{flex:0 0 84px}',
           '.steerCamApp .sc-row input[type=range]{flex:1 1 auto;min-width:34px;accent-color:#ff7a18}',
+          '.steerCamApp .sc-presets-row{display:flex;align-items:center;gap:7px;margin-bottom:8px}',
+          '.steerCamApp .sc-presets-lbl{flex:0 0 auto;font-weight:700;font-size:12px;color:#ff7a18}',
+          '.steerCamApp .sc-dd{position:relative;flex:1 1 auto}',
+          '.steerCamApp .sc-dd-head{width:100%;display:flex;justify-content:space-between;align-items:center;',
+            'background:rgba(255,255,255,0.08);color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);',
+            'border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer}',
+          '.steerCamApp .sc-dd-head:hover{background:rgba(255,255,255,0.16)}',
+          '.steerCamApp .sc-dd-arr{color:#ff7a18;font-size:9px;margin-left:6px}',
+          '.steerCamApp .sc-dd-list{position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:20;',
+            'background:rgba(28,28,32,0.98);border:1px solid rgba(255,255,255,0.18);border-radius:4px;overflow:hidden}',
+          '.steerCamApp .sc-dd-opt{padding:5px 7px;font-size:11px;cursor:pointer}',
+          '.steerCamApp .sc-dd-opt:hover{background:rgba(255,255,255,0.12)}',
+          '.steerCamApp .sc-dd-opt.active{background:#ff7a18;color:#161616;font-weight:700}',
           '.steerCamApp .sc-row>b{flex:0 0 42px;text-align:right;color:#fff;font-variant-numeric:tabular-nums}',
           '.steerCamApp .sc-chk label{display:flex;align-items:center;gap:7px;cursor:pointer}',
           '.steerCamApp .sc-chk input{accent-color:#ff7a18}',
@@ -35,15 +48,21 @@ angular.module('beamng.apps')
 
         '<div class="sc-title">SteerCam</div>',
 
-        '<div class="sc-presets">',
-          '<button ng-repeat="p in presetNames" ng-class="{active: preset===p}" ng-click="choose(p)">{{p}}</button>',
+        '<div class="sc-presets-row">',
+          '<span class="sc-presets-lbl">Presets</span>',
+          '<div class="sc-dd">',
+            '<button class="sc-dd-head" ng-click="toggleDD(\'preset\')">{{preset}}<span class="sc-dd-arr">▾</span></button>',
+            '<div class="sc-dd-list" ng-show="openDD===\'preset\'">',
+              '<div class="sc-dd-opt" ng-repeat="p in presetNames" ng-class="{active: preset===p}" ng-click="choose(p); openDD=null">{{p}}</div>',
+            '</div>',
+          '</div>',
         '</div>',
 
         '<div class="sc-sec"><label class="sc-en"><span>Camera settings override</span><input type="checkbox" ng-model="cfg.camEnable" ng-change="set(\'camEnable\', cfg.camEnable)" ng-disabled="locked"></label></div>',
-        '<div class="sc-row" ng-show="cfg.camEnable"><span>Forward</span>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>Forward Offset</span>',
           '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camFwd" ng-change="set(\'camFwd\', cfg.camFwd)" ng-disabled="locked">',
           '<b>{{cfg.camFwd}}m</b></div>',
-        '<div class="sc-row" ng-show="cfg.camEnable"><span>Up</span>',
+        '<div class="sc-row" ng-show="cfg.camEnable"><span>Vertical Offset</span>',
           '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camUp" ng-change="set(\'camUp\', cfg.camUp)" ng-disabled="locked">',
           '<b>{{cfg.camUp}}m</b></div>',
         '<div class="sc-row" ng-show="cfg.camEnable"><span>Rotate L/R</span>',
@@ -56,7 +75,7 @@ angular.module('beamng.apps')
           '<input type="range" min="40" max="120" step="1" ng-model="cfg.camFov" ng-change="set(\'camFov\', cfg.camFov)" ng-disabled="locked">',
           '<b>{{cfg.camFov}}°</b></div>',
 
-        '<div class="sc-sec"><label class="sc-en"><span>Steer camera turn</span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="set(\'steerEnable\', cfg.steerEnable)" ng-disabled="locked"></label></div>',
+        '<div class="sc-sec"><label class="sc-en"><span>Steering Input Pan</span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="set(\'steerEnable\', cfg.steerEnable)" ng-disabled="locked"></label></div>',
         '<div class="sc-row" ng-show="cfg.steerEnable"><span>Angle</span>',
           '<input type="range" min="0" max="90" step="1" ng-model="cfg.angle" ng-change="set(\'angle\', cfg.angle)" ng-disabled="locked">',
           '<b>{{cfg.angle}}°</b></div>',
@@ -66,10 +85,17 @@ angular.module('beamng.apps')
         '<div class="sc-row" ng-show="cfg.steerEnable"><span>Stiffness</span>',
           '<input type="range" min="1" max="40" step="1" ng-model="cfg.stiffness" ng-change="set(\'stiffness\', cfg.stiffness)" ng-disabled="locked">',
           '<b>{{cfg.stiffness}}</b></div>',
+        '<div class="sc-row sc-chk" ng-show="cfg.steerEnable"><label><input type="checkbox" ng-model="cfg.reverseSteer" ng-change="set(\'reverseSteer\', cfg.reverseSteer)" ng-disabled="locked"> Mirror turn direction when reversing</label></div>',
+        '<div class="sc-row" ng-show="cfg.steerEnable && cfg.reverseSteer"><span>Reverse angle</span>',
+          '<input type="range" min="0" max="90" step="1" ng-model="cfg.reverseAngle" ng-change="set(\'reverseAngle\', cfg.reverseAngle)" ng-disabled="locked">',
+          '<b>{{cfg.reverseAngle}}°</b></div>',
+        '<div class="sc-row" ng-show="cfg.steerEnable && cfg.reverseSteer"><span>Reverse blend</span>',
+          '<input type="range" min="0" max="3000" step="50" ng-model="cfg.reverseTime" ng-change="set(\'reverseTime\', cfg.reverseTime)" ng-disabled="locked">',
+          '<b>{{cfg.reverseTime}}ms</b></div>',
         '<div class="sc-row sc-chk" ng-show="cfg.steerEnable"><label><input type="checkbox" ng-model="cfg.speedFade" ng-change="set(\'speedFade\', cfg.speedFade)" ng-disabled="locked"> Fade in with speed</label></div>',
         '<div class="sc-row" ng-show="cfg.steerEnable && cfg.speedFade"><span>Fade speed</span>',
-          '<input type="range" min="0.5" max="40" step="0.5" ng-model="cfg.fadeSpeed" ng-change="set(\'fadeSpeed\', cfg.fadeSpeed)" ng-disabled="locked">',
-          '<b>{{cfg.fadeSpeed}}</b></div>',
+          '<input type="range" min="5" max="150" step="5" ng-model="cfg.fadeSpeed" ng-change="set(\'fadeSpeed\', cfg.fadeSpeed)" ng-disabled="locked">',
+          '<b style="flex:0 0 64px">{{cfg.fadeSpeed}} km/h</b></div>',
 
         '<div class="sc-sec"><label class="sc-en"><span>Blind-spot glance</span><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="set(\'glanceEnable\', cfg.glanceEnable)" ng-disabled="locked"></label></div>',
         '<div class="sc-row" ng-show="cfg.glanceEnable"><span>Left angle</span>',
@@ -81,6 +107,13 @@ angular.module('beamng.apps')
         '<div class="sc-row" ng-show="cfg.glanceEnable"><span>Glance time</span>',
           '<input type="range" min="0" max="500" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked">',
           '<b>{{cfg.glanceTime}}ms</b></div>',
+        '<div class="sc-row" ng-show="cfg.glanceEnable"><span>Glance curve</span>',
+          '<div class="sc-dd">',
+            '<button class="sc-dd-head" ng-click="toggleDD(\'curve\')" ng-disabled="locked">{{curveLabel(cfg.glanceCurve)}}<span class="sc-dd-arr">▾</span></button>',
+            '<div class="sc-dd-list" ng-show="openDD===\'curve\'">',
+              '<div class="sc-dd-opt" ng-repeat="o in curveOptions" ng-class="{active: cfg.glanceCurve===o.k}" ng-click="setCurve(o.k); openDD=null">{{o.l}}</div>',
+            '</div>',
+          '</div></div>',
         '<div class="sc-row" ng-show="cfg.glanceEnable"><span>Left offset</span>',
           '<input type="range" min="0" max="0.6" step="0.01" ng-model="cfg.glanceOffsetLeft" ng-change="set(\'glanceOffsetLeft\', cfg.glanceOffsetLeft)" ng-disabled="locked">',
           '<b>{{cfg.glanceOffsetLeft}}m</b></div>',
@@ -115,16 +148,31 @@ angular.module('beamng.apps')
     replace: true,
     restrict: 'EA',
     link: function (scope, element, attrs) {
-      scope.presetNames = ['Default', 'Custom'];
+      scope.presetNames = ['Default', "Dev's Preset", 'Custom'];
       scope.preset = 'Default';
       scope.locked = true;
       scope.glanceSide = 'none';
+      scope.openDD = null;   // which custom dropdown is open ('preset' | 'curve' | null)
+      scope.curveOptions = [
+        { k: 'Exponential', l: 'Exponential (native)' },
+        { k: 'Linear', l: 'Linear' },
+        { k: 'S-curve', l: 'S-curve' },
+        { k: 'Ease1', l: 'Ease1' },
+        { k: 'Ease2', l: 'Ease2' }
+      ];
+      scope.curveLabel = function (k) {
+        for (var i = 0; i < scope.curveOptions.length; i++) {
+          if (scope.curveOptions[i].k === k) { return scope.curveOptions[i].l; }
+        }
+        return k;
+      };
+      scope.toggleDD = function (n) { scope.openDD = (scope.openDD === n) ? null : n; };
       scope.cfg = {
         camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65,
         steerEnable: true,
-        angle: 18, reach: 35, stiffness: 15, speedFade: false, fadeSpeed: 8,
+        angle: 18, reach: 35, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30,
         glanceEnable: true,
-        glanceLeft: 115, glanceRight: 115, glanceTime: 120,
+        glanceLeft: 115, glanceRight: 115, glanceTime: 120, glanceCurve: 'Exponential',
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10,
         speedModEnable: true,
         vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160
@@ -133,6 +181,8 @@ angular.module('beamng.apps')
       function pushOne(key, val) {
         if (typeof val === 'boolean') {
           bngApi.engineLua("if steerCam then steerCam.set('" + key + "', " + (val ? 'true' : 'false') + ") end");
+        } else if (typeof val === 'string') {
+          bngApi.engineLua("if steerCam then steerCam.set('" + key + "', '" + val + "') end");
         } else {
           var n = parseFloat(val);
           if (isNaN(n)) { return; }
@@ -166,9 +216,10 @@ angular.module('beamng.apps')
         syncGlance();
       }
 
-      // click Default / Custom
+      // pick a preset (escape any apostrophe, e.g. "Dev's Preset", for the Lua call)
       scope.choose = function (name) {
-        bngApi.engineLua("if steerCam then steerCam.setPreset('" + name + "') end");
+        var safe = name.replace(/'/g, "\\'");
+        bngApi.engineLua("if steerCam then steerCam.setPreset('" + safe + "') end");
         scope.preset = name;
         scope.locked = (name !== 'Custom');
         load(); // refresh the shown values for the selected profile
@@ -187,6 +238,26 @@ angular.module('beamng.apps')
         var on = (scope.glanceSide === side);
         bngApi.engineLua("if steerCam then steerCam.glanceSet('" + side + "', " + (on ? 'true' : 'false') + ") end");
       };
+
+      // pick a glance easing curve (button group; native <select> doesn't open in the UI)
+      scope.setCurve = function (name) {
+        if (scope.locked) { return; }
+        scope.cfg.glanceCurve = name;
+        pushOne('glanceCurve', name);
+      };
+
+      // close an open custom dropdown when clicking/tapping anywhere outside it
+      function ddOutside(e) {
+        if (!scope.openDD) { return; }
+        var n = e.target;
+        while (n) {
+          if (n.classList && n.classList.contains('sc-dd')) { return; } // inside a dropdown
+          n = n.parentNode;
+        }
+        scope.$applyAsync(function () { scope.openDD = null; });
+      }
+      document.addEventListener('mousedown', ddOutside, true);
+      scope.$on('$destroy', function () { document.removeEventListener('mousedown', ddOutside, true); });
 
       element.ready(function () {
         load();

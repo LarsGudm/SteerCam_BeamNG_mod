@@ -26,39 +26,46 @@ The per-app "Hide in cockpit view" checkbox works with SteerCam: any app with
 it ticked hides while the SteerCam view is active (SteerCam reports itself to the
 UI as a cockpit/"driver" view so the game's hide logic kicks in).
 
-Two profiles, selected with the buttons at the top:
+Three profiles, picked from the "Presets" dropdown at the top:
 
-  Default   Shown but LOCKED (greyed out) - you can't
-            change them. Angle 18, Full angle at 35%, Stiffness 15.
+  Default       LOCKED (read-only) - a simple, conservative baseline.
 
-  Custom    Your own profile. Click it to unlock the controls and edit. Your
-            changes are saved and kept separate from Default, so you can switch
-            to Default and back to Custom without losing them. The first time
-            you open Custom it starts from the Default values.
+  Dev's Preset  LOCKED (read-only) - a tuned "immersion" set (steer fade,
+                reverse mirror, speed vertigo + roll, softer glance easing).
+
+  Custom        Your own profile. Pick it to unlock the controls and edit. Your
+                changes are saved separately, so you can switch presets and back
+                without losing them. It starts from the Default values.
 
 Controls (editable on Custom):
   Camera settings override      (section) seat position, aim + FOV override
-  Forward          -0.5..0.5 m  move the seat forward (+) or back (-)
-  Up               -0.5..0.5 m  move the seat up (+) or down (-)
-  Rotate L/R        -45..45 deg aim the view right (+) or left (-)
-  Rotate U/D        -45..45 deg aim the view up (+) or down (-)
+  Forward Offset   -0.5..0.5 m  move the seat forward (+) or back (-)
+  Vertical Offset  -0.5..0.5 m  move the seat up (+) or down (-)
+  Rotate L/R        -45..45 deg pan the view (gimbal): - = left, + = right
+  Rotate D/U        -45..45 deg tilt the view (gimbal): always world-vertical
   FOV               40-120 deg  field of view; overrides the camera's own FOV
                                 (def. 65). Speed vertigo stacks on top of this.
 
+  Steering Input Pan            (section) the steer-following turn
   Angle              0-90 deg   how far the view turns at full lock
   Steering range     10-100 %   how much steering reaches the full angle
                                 (e.g. 50% = fully turned by half-lock; lower =
-                                more reactive to small steering inputs). Also
-                                normalizes the steering used by Speed camera roll.
+                                more reactive to small steering inputs)
   Stiffness          1-40       transition speed; higher = snappier
+  Mirror turn ...reversing      while reversing, mirror the turn the other way
+  Reverse angle      0-90 deg   its own angle while reversing (def. 9)
+  Reverse blend      0-1000 ms  how slowly it eases between forward/reverse
+                                (buffers spin-outs; def. 500)
   Fade in with speed            scales the turn by speed (off = full at any
                                 speed; on = none when stopped, ramps to full by
                                 Fade speed)
-  Fade speed                    (only shown when fade is on)
+  Fade speed         5-150 km/h (only shown when fade is on; def. 30)
 
   Left angle         0-170 deg  blind-spot glance angle to the left (def. 115)
   Right angle        0-170 deg  blind-spot glance angle to the right (def. 115)
   Glance time        0-500 ms   how fast a glance snaps in/out (0 = instant)
+  Glance curve                  easing curve (dropdown): Exponential (native) /
+                                Linear / S-curve / Ease1 / Ease2
   Left offset        0-0.6 m    lean left when glancing left (def. 0.10) - bump
                                 it up if the view clips into the seat
   Right offset       0-0.6 m    lean right when glancing right (def. 0.10)
@@ -107,7 +114,7 @@ it feels right. Click the preview button again to release.
 
 WHAT'S INSIDE
 -------------
-  lua/ge/extensions/core/cameraModes/steercam.lua    the camera + config
+  lua/ge/extensions/core/cameraModes/steercam.lua    the camera + config + presets
   lua/ge/extensions/core/input/actions/steercam.json    glance key bindings
   lua/vehicle/extensions/auto/steerCamFeed.lua          feeds steering to GE
   ui/modules/apps/SteerCam/                             the settings panel app

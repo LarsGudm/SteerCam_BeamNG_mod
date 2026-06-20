@@ -35,35 +35,16 @@ if not steerCam then
   end
   local function clampv(x, lo, hi) return x < lo and lo or (x > hi and hi or x) end
 
-  -- The Default profile (fixed; never written to).
+  -- The Default profile (simple baseline; fixed, never written to).
+  -- Inline on purpose (no external file load) -- reliability over tidiness.
   steerCam.defaults = {
-    -- Camera (seat position + FOV override); first category in the UI
-    camEnable  = true,   -- master toggle for the camera-options section
-    camFwd     = 0.0,    -- seat offset forward/back (m, + = forward)
-    camUp      = 0.0,    -- seat offset up/down (m, + = up)
-    camYaw     = 0.0,    -- aim rotation left/right (deg, + = right)
-    camPitch   = 0.0,    -- aim rotation up/down (deg, + = up)
-    camFov     = 65.0,   -- FOV override (deg); replaces the stock camera FOV
-    steerEnable = true,  -- master toggle for the steer-follow turn
-    angle      = 18.0,   -- max yaw at full lock (deg)
-    reach      = 65.0,   -- % of steering input at which the full angle is reached
-    stiffness  = 15.0,   -- transition speed (higher = snappier)
-    speedFade  = false,  -- scale turn by speed (off = full at any speed)
-    fadeSpeed  = 8.0,    -- m/s for full strength when speedFade is on
-    glanceEnable = true, -- master toggle for blind-spot glance
-    glanceLeft  = 115.0, -- blind-spot glance angle to the left (deg)
-    glanceRight = 115.0, -- blind-spot glance angle to the right (deg)
-    glanceTime  = 120.0, -- ms to complete a glance (<=5 = instant snap)
-    glanceOffsetLeft  = 0.10, -- m to lean left when glancing left
-    glanceOffsetRight = 0.10, -- m to lean right when glancing right
-    -- "Speed modifiers" (mostly for fun; both ramp to full strength at speedRange)
-    speedModEnable = true, -- master toggle for the whole speed-modifiers section
-    vertigo    = false,  -- FOV widens with speed (speed vertigo)
-    vertigoFov = 12.0,   -- max extra FOV (deg) reached at speedRange
-    vertigoDolly = 0.30, -- distance (m) kept pinned by the counter-dolly (0 = off)
-    speedRoll  = false,  -- camera banks into corners, scaled by speed
-    rollAngle  = 5.0,    -- max roll (deg)
-    speedRange = 160.0,  -- km/h at which the effects reach full strength
+    camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0,
+    steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
+    reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0,
+    glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceTime = 120.0,
+    glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceCurve = "Exponential",
+    speedModEnable = true, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
+    speedRoll = false, rollAngle = 5.0, speedRange = 160.0,
   }
 
   -- The Custom profile (editable; starts as a copy of Default, then persists).
@@ -78,6 +59,9 @@ if not steerCam then
     angle      = getNum("steerCam_custom_angle",       steerCam.defaults.angle),
     reach      = getNum("steerCam_custom_reach",       steerCam.defaults.reach),
     stiffness  = getNum("steerCam_custom_stiffness",   steerCam.defaults.stiffness),
+    reverseSteer = getBool("steerCam_custom_reverseSteer", steerCam.defaults.reverseSteer),
+    reverseAngle = getNum("steerCam_custom_reverseAngle",  steerCam.defaults.reverseAngle),
+    reverseTime  = getNum("steerCam_custom_reverseTime",   steerCam.defaults.reverseTime),
     speedFade  = getBool("steerCam_custom_speedFade",  steerCam.defaults.speedFade),
     fadeSpeed  = getNum("steerCam_custom_fadeSpeed",   steerCam.defaults.fadeSpeed),
     glanceEnable = getBool("steerCam_custom_glanceEnable", steerCam.defaults.glanceEnable),
@@ -86,6 +70,7 @@ if not steerCam then
     glanceTime  = getNum("steerCam_custom_glanceTime",   steerCam.defaults.glanceTime),
     glanceOffsetLeft  = getNum("steerCam_custom_glanceOffsetLeft",  steerCam.defaults.glanceOffsetLeft),
     glanceOffsetRight = getNum("steerCam_custom_glanceOffsetRight", steerCam.defaults.glanceOffsetRight),
+    glanceCurve = getStr("steerCam_custom_glanceCurve", steerCam.defaults.glanceCurve),
     speedModEnable = getBool("steerCam_custom_speedModEnable", steerCam.defaults.speedModEnable),
     vertigo    = getBool("steerCam_custom_vertigo",    steerCam.defaults.vertigo),
     vertigoFov = getNum("steerCam_custom_vertigoFov",  steerCam.defaults.vertigoFov),
@@ -95,13 +80,29 @@ if not steerCam then
     speedRange = getNum("steerCam_custom_speedRange",  steerCam.defaults.speedRange),
   }
 
+  -- Dev's Preset: a fixed "immersion" preset = Default + feel tweaks (read-only).
+  steerCam.dev = {}
+  for k, v in pairs(steerCam.defaults) do steerCam.dev[k] = v end
+  steerCam.dev.speedFade    = true
+  steerCam.dev.reverseSteer = true
+  steerCam.dev.vertigo      = true
+  steerCam.dev.speedRoll    = true
+  steerCam.dev.glanceCurve  = "Ease2"
+
   steerCam.preset = getStr("steerCam_preset", "Default")
   -- steerCam.cfg points at whichever profile is active (the camera reads this)
-  steerCam.cfg = (steerCam.preset == "Custom") and steerCam.custom or steerCam.defaults
+  steerCam.cfg = (steerCam.preset == "Custom") and steerCam.custom
+              or (steerCam.preset == "Dev's Preset") and steerCam.dev
+              or steerCam.defaults
 
   local ranges = {
-    camFwd = {-0.5, 0.5}, camUp = {-0.5, 0.5}, camYaw = {-45, 45}, camPitch = {-45, 45}, camFov = {40, 120},
-    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {0.5, 40},
+    camFwd = {-0.5, 0.5}, 
+    camUp = {-0.5, 0.5}, 
+    camYaw = {-45, 45}, 
+    camPitch = {-45, 45}, 
+    camFov = {40, 120},
+    angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150},
+    reverseAngle = {0, 90}, reverseTime = {0, 3000},
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
     glanceOffsetLeft = {0, 0.6}, glanceOffsetRight = {0, 0.6},
     vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
@@ -109,13 +110,17 @@ if not steerCam then
   local bools  = {
     speedFade = true, vertigo = true, speedRoll = true,
     camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
+    reverseSteer = true,
   }
+  local strs = { glanceCurve = true }   -- string-valued settings
 
   -- UI: switch active profile
   function steerCam.setPreset(name)
-    if name ~= "Custom" then name = "Default" end
+    if name ~= "Custom" and name ~= "Dev's Preset" then name = "Default" end
     steerCam.preset = name
-    steerCam.cfg = (name == "Custom") and steerCam.custom or steerCam.defaults
+    steerCam.cfg = (name == "Custom") and steerCam.custom
+                or (name == "Dev's Preset") and steerCam.dev
+                or steerCam.defaults
     save("steerCam_preset", name)
   end
 
@@ -125,6 +130,8 @@ if not steerCam then
     if c[key] == nil then return end
     if bools[key] then
       c[key] = (value == true or value == 1 or value == "true")
+    elseif strs[key] then
+      c[key] = tostring(value)
     else
       value = tonumber(value)
       if value == nil then return end
@@ -144,10 +151,12 @@ if not steerCam then
       camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov,
       steerEnable = a.steerEnable,
       angle = a.angle, reach = a.reach, stiffness = a.stiffness,
+      reverseSteer = a.reverseSteer, reverseAngle = a.reverseAngle, reverseTime = a.reverseTime,
       speedFade = a.speedFade, fadeSpeed = a.fadeSpeed,
       glanceEnable = a.glanceEnable,
       glanceLeft = a.glanceLeft, glanceRight = a.glanceRight, glanceTime = a.glanceTime,
       glanceOffsetLeft = a.glanceOffsetLeft, glanceOffsetRight = a.glanceOffsetRight,
+      glanceCurve = a.glanceCurve,
       speedModEnable = a.speedModEnable,
       vertigo = a.vertigo, vertigoFov = a.vertigoFov, vertigoDolly = a.vertigoDolly,
       speedRoll = a.speedRoll, rollAngle = a.rollAngle, speedRange = a.speedRange,
@@ -208,6 +217,44 @@ local rad = math.rad
 local function clamp01(x) return x < 0 and 0 or (x > 1 and 1 or x) end
 local function clampUnit(x) return x < -1 and -1 or (x > 1 and 1 or x) end
 
+-- Easing curves: map a 0..1 progress to a 0..1 eased value (glance + reverse).
+local exp = math.exp
+local function easeLinear(p) return p end
+local function easeExp(p)             -- exponential ease-out: sharp start, soft tail
+  if p <= 0 then return 0 end
+  if p >= 1 then return 1 end
+  return (1 - exp(-5 * p)) / (1 - exp(-5))
+end
+local function easeSCurve(p)          -- smootherstep S-curve: gentle in and out
+  if p <= 0 then return 0 end
+  if p >= 1 then return 1 end
+  return p * p * p * (p * (p * 6 - 15) + 10)
+end
+local function makeBezier(x1, y1, x2, y2)   -- CSS cubic-bezier(x1,y1,x2,y2)
+  return function(p)
+    if p <= 0 then return 0 end
+    if p >= 1 then return 1 end
+    local t = p
+    for _ = 1, 6 do                   -- Newton: solve bezierX(t) = p for t
+      local mt = 1 - t
+      local fx = 3*mt*mt*t*x1 + 3*mt*t*t*x2 + t*t*t - p
+      local dx = 3*mt*mt*x1 + 6*mt*t*(x2 - x1) + 3*t*t*(1 - x2)
+      if dx > -1e-6 and dx < 1e-6 then break end
+      t = t - fx / dx
+      if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    end
+    local mt = 1 - t
+    return 3*mt*mt*t*y1 + 3*mt*t*t*y2 + t*t*t   -- bezierY(t)
+  end
+end
+local easeCurves = {
+  Exponential = easeExp,
+  Linear      = easeLinear,
+  ["S-curve"] = easeSCurve,
+  Ease1       = makeBezier(0.520, 0.359, 0.262, 0.934),
+  Ease2       = makeBezier(0.311, 0.130, 0.109, 0.992),
+}
+
 -- Make SteerCam look like the stock "driver" camera to the UI, so per-app
 -- "Hide in cockpit view" works while SteerCam is active. BeamNG only hides
 -- cockpit apps when the active camera name is exactly "driver" (see the UI's
@@ -248,7 +295,10 @@ end
 return function(...)
   local o = makeStockDriver(...)   -- a real stock driver-camera instance
   o.steerYaw  = 0
+  o.reverseBlend = 0   -- 0 = forward turn, 1 = mirrored (reverse) turn
+  o.reverseFrom = 0; o.reverseProg = 1; o.reverseTargetVal = 0   -- reverse tween state
   o.glanceAmt = 0   -- 0..1 how far the glance overrides steer-follow
+  o.glanceFrom = 0; o.glanceProg = 1; o.glanceTargetVal = 0      -- glance tween state
   o.glanceYaw = 0   -- target yaw of the active glance (rad)
   o.glanceLat = 0   -- target lateral lean of the active glance (m, + = car right)
   o.rollCur   = 0   -- current smoothed speed-roll (rad)
@@ -317,10 +367,34 @@ return function(...)
 
     local reachFrac = (c.reach or 100) / 100
     if reachFrac < 0.1 then reachFrac = 0.1 end
-    local yawTarget = rad(c.angle) * clampUnit(steer / reachFrac)
+    -- while reversing (velocity opposes forward), blend toward the mirrored turn
+    -- over reverseTime (anim curve like the glance). Smooths the low-speed kick-in
+    -- AND buffers spin-outs where the velocity briefly flips direction.
+    local revTarget = 0
+    if c.reverseSteer and data.vel ~= nil and data.veh ~= nil then
+      gFwd:set(data.veh:getDirectionVector())
+      if data.vel:dot(gFwd) < -0.05 then revTarget = 1 end   -- ~0.18 km/h: near-instant
+    end
+    if revTarget ~= self.reverseTargetVal then       -- (re)start the tween on a flip
+      self.reverseFrom = self.reverseBlend
+      self.reverseTargetVal = revTarget
+      self.reverseProg = 0
+    end
+    local rt = c.reverseTime or 0
+    if rt <= 5 then
+      self.reverseProg = 1
+      self.reverseBlend = self.reverseTargetVal
+    else
+      self.reverseProg = clamp01(self.reverseProg + dt * 1000 / rt)
+      self.reverseBlend = self.reverseFrom + (self.reverseTargetVal - self.reverseFrom) * easeSCurve(self.reverseProg)
+    end
+    -- effective angle blends forward (+angle) -> mirrored (-reverseAngle)
+    local effAngle = rad(c.angle) * (1 - self.reverseBlend) - rad(c.reverseAngle or 0) * self.reverseBlend
+    local yawTarget = effAngle * clampUnit(steer / reachFrac)
     if c.speedFade then
       local spd = (data.vel and data.vel:length()) or 0
-      yawTarget = yawTarget * clamp01(spd / (c.fadeSpeed > 0.1 and c.fadeSpeed or 0.1))
+      local fadeMs = (c.fadeSpeed or 30) / 3.6     -- km/h -> m/s
+      yawTarget = yawTarget * clamp01(spd / (fadeMs > 0.1 and fadeMs or 0.1))
     end
     self.steerYaw = self.steerYaw + (yawTarget - self.steerYaw) * clamp01(dt * c.stiffness)
 
@@ -341,12 +415,20 @@ return function(...)
       self.glanceYaw = (side > 0) and -rad(c.glanceLeft or 0) or rad(c.glanceRight or 0)
       self.glanceLat = (side > 0) and -(c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
     end
-    -- glanceTime = ms to reach ~95% of the glance; <=5ms snaps instantly
+    -- glance amount: timed tween 0<->1 over glanceTime, through the chosen curve
+    if desired ~= self.glanceTargetVal then          -- (re)start on engage/release
+      self.glanceFrom = self.glanceAmt
+      self.glanceTargetVal = desired
+      self.glanceProg = 0
+    end
     local gt = c.glanceTime or 100
     if gt <= 5 then
-      self.glanceAmt = desired
+      self.glanceProg = 1
+      self.glanceAmt = self.glanceTargetVal
     else
-      self.glanceAmt = self.glanceAmt + (desired - self.glanceAmt) * clamp01(dt * (3000 / gt))
+      self.glanceProg = clamp01(self.glanceProg + dt * 1000 / gt)
+      local cf = easeCurves[c.glanceCurve] or easeExp
+      self.glanceAmt = self.glanceFrom + (self.glanceTargetVal - self.glanceFrom) * cf(self.glanceProg)
     end
 
     -- glanceAmt=1 → pure glance (override); glanceAmt=0 → pure steer-follow
