@@ -160,12 +160,19 @@ angular.module('beamng.apps')
           '<div class="sc-row"><span>Back roll<span class="sc-tipsrc" ng-if="tips.glanceBackRoll">{{tips.glanceBackRoll}}</span><span class="sc-info" ng-if="tips.glanceBackRoll">&#9432;</span></span>',
             '<input type="range" min="-15" max="15" step="1" ng-model="cfg.glanceBackRoll" ng-change="set(\'glanceBackRoll\', cfg.glanceBackRoll)" ng-disabled="locked">',
             '<b>{{cfg.glanceBackRoll}}°</b></div>',
-          '<div class="sc-row"><span>Glance time<span class="sc-tipsrc" ng-if="tips.glanceTime">{{tips.glanceTime}}</span><span class="sc-info" ng-if="tips.glanceTime">&#9432;</span></span>',
-            '<input type="range" min="0" max="500" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked">',
-            '<b>{{cfg.glanceTime}}ms</b></div>',
-          '<div class="sc-row"><span>Glance curve<span class="sc-tipsrc" ng-if="tips.glanceCurve">{{tips.glanceCurve}}</span><span class="sc-info" ng-if="tips.glanceCurve">&#9432;</span></span>',
+          '<div class="sc-row"><span>Glance transition<span class="sc-tipsrc" ng-if="tips.glanceTransition">{{tips.glanceTransition}}</span><span class="sc-info" ng-if="tips.glanceTransition">&#9432;</span></span>',
             '<div class="sc-dd">',
-              '<button class="sc-dd-head" ng-click="toggleDD(\'curve\')" ng-disabled="locked">{{curveLabel(cfg.glanceCurve)}}<span class="sc-dd-arr">▾</span></button>',
+              '<button class="sc-dd-head" ng-click="toggleDD(\'transition\')" ng-disabled="locked">{{transitionLabel(cfg.glanceTransition)}}<span class="sc-dd-arr">▾</span></button>',
+              '<div class="sc-dd-list" ng-show="openDD===\'transition\'">',
+                '<div class="sc-dd-opt" ng-repeat="o in transitionOptions" ng-class="{active: cfg.glanceTransition===o.k}" ng-click="setTransition(o.k); openDD=null">{{o.l}}</div>',
+              '</div>',
+            '</div></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':cfg.glanceTransition===\'None\'}"><span>Glance time<span class="sc-tipsrc" ng-if="tips.glanceTime">{{tips.glanceTime}}</span><span class="sc-info" ng-if="tips.glanceTime">&#9432;</span></span>',
+            '<input type="range" min="0" max="500" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked || cfg.glanceTransition===\'None\'">',
+            '<b>{{cfg.glanceTime}}ms</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':cfg.glanceTransition===\'None\'}"><span>Glance curve<span class="sc-tipsrc" ng-if="tips.glanceCurve">{{tips.glanceCurve}}</span><span class="sc-info" ng-if="tips.glanceCurve">&#9432;</span></span>',
+            '<div class="sc-dd">',
+              '<button class="sc-dd-head" ng-click="toggleDD(\'curve\')" ng-disabled="locked || cfg.glanceTransition===\'None\'">{{curveLabel(cfg.glanceCurve)}}<span class="sc-dd-arr">▾</span></button>',
               '<div class="sc-dd-list" ng-show="openDD===\'curve\'">',
                 '<div class="sc-dd-opt" ng-repeat="o in curveOptions" ng-class="{active: cfg.glanceCurve===o.k}" ng-click="setCurve(o.k); openDD=null">{{o.l}}</div>',
               '</div>',
@@ -230,6 +237,7 @@ angular.module('beamng.apps')
         fadeFloor: 'How much of the camera pan is kept even at a standstill. 0 = none until moving.',
         glanceLeft: '',
         glanceRight: '',
+        glanceTransition: 'How glance time is used. None = instant snap. Fixed time = same time for any angle. Constant speed = time scales with the angle, like turning your head at a steady rate (glance time = a full 180° turn).',
         glanceTime: '',
         glanceCurve: 'Easing curve for the glance motion.',
         glanceOffsetLeft: '',
@@ -243,7 +251,7 @@ angular.module('beamng.apps')
       };
       // per-section twirl state; refreshed from each profile's enable flags on load
       scope.collapsed = { cam: false, steer: false, glance: false, speed: true };
-      scope.openDD = null;   // which custom dropdown is open ('preset' | 'curve' | null)
+      scope.openDD = null;   // which custom dropdown is open ('preset' | 'curve' | 'transition' | null)
       scope.curveOptions = [
         { k: 'Exponential', l: 'Exponential (native)' },
         { k: 'Linear', l: 'Linear' },
@@ -254,6 +262,19 @@ angular.module('beamng.apps')
       scope.curveLabel = function (k) {
         for (var i = 0; i < scope.curveOptions.length; i++) {
           if (scope.curveOptions[i].k === k) { return scope.curveOptions[i].l; }
+        }
+        return k;
+      };
+      // how the glance tween is timed (see steercam.lua): instant / fixed duration /
+      // distance-scaled so the turn rate is constant ("spin your head" feel).
+      scope.transitionOptions = [
+        { k: 'None', l: 'None (instant)' },
+        { k: 'Fixed time', l: 'Fixed time' },
+        { k: 'Constant speed', l: 'Constant speed' }
+      ];
+      scope.transitionLabel = function (k) {
+        for (var i = 0; i < scope.transitionOptions.length; i++) {
+          if (scope.transitionOptions[i].k === k) { return scope.transitionOptions[i].l; }
         }
         return k;
       };
@@ -282,7 +303,7 @@ angular.module('beamng.apps')
         steerEnable: true,
         angle: 18, reach: 35, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
         glanceEnable: true,
-        glanceLeft: 115, glanceRight: 115, glanceBack: 0, glanceTime: 120, glanceCurve: 'Exponential',
+        glanceLeft: 115, glanceRight: 115, glanceBack: 0, glanceTime: 120, glanceCurve: 'Exponential', glanceTransition: 'Fixed time',
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10, glanceOffsetBack: 0, glanceBackRoll: 0,
         speedModEnable: true,
         vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160
@@ -380,6 +401,13 @@ angular.module('beamng.apps')
         if (scope.locked) { return; }
         scope.cfg.glanceCurve = name;
         pushOne('glanceCurve', name);
+      };
+
+      // pick how the glance transition is timed (None / Fixed time / Constant speed)
+      scope.setTransition = function (name) {
+        if (scope.locked) { return; }
+        scope.cfg.glanceTransition = name;
+        pushOne('glanceTransition', name);
       };
 
       // close an open custom dropdown when clicking/tapping anywhere outside it

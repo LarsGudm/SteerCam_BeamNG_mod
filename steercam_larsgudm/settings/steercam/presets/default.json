@@ -31,6 +31,7 @@
   "glanceOffsetBack": 0.0,
   "glanceBackRoll": 0.0,
   "glanceCurve": "Exponential",
+  "glanceTransition": "Fixed time",
 
   "speedModEnable": false,
   "vertigo": false,

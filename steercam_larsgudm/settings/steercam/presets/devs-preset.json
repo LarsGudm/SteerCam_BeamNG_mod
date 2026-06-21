@@ -31,6 +31,7 @@
   "glanceOffsetBack": 0.0,
   "glanceBackRoll": 0.0,
   "glanceCurve": "Ease2",
+  "glanceTransition": "Fixed time",
 
   "speedModEnable": true,
   "vertigo": true,

@@ -45,7 +45,8 @@ if not steerCam then
     steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
     reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0, fadeFloor = 0.0,
     glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceBack = 0.0, glanceTime = 120.0,
-    glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceOffsetBack = 0.0, glanceBackRoll = 0.0, glanceCurve = "Exponential",
+    glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceOffsetBack = 0.0, glanceBackRoll = 0.0,
+    glanceCurve = "Exponential", glanceTransition = "Fixed time",
     speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
     speedRoll = false, rollAngle = 5.0, speedRange = 160.0,
   }
@@ -69,7 +70,7 @@ if not steerCam then
     camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
     reverseSteer = true,
   }
-  local strs = { glanceCurve = true }   -- string-valued settings
+  local strs = { glanceCurve = true, glanceTransition = true }   -- string-valued settings
 
   -- Build a clean cfg from a decoded preset file: start from Default, then copy
   -- over any KNOWN key (correct type; numbers clamped to range). Unknown keys are
@@ -168,6 +169,7 @@ if not steerCam then
     glanceOffsetBack  = getNum("steerCam_custom_glanceOffsetBack",  steerCam.defaults.glanceOffsetBack),
     glanceBackRoll    = getNum("steerCam_custom_glanceBackRoll",    steerCam.defaults.glanceBackRoll),
     glanceCurve = getStr("steerCam_custom_glanceCurve", steerCam.defaults.glanceCurve),
+    glanceTransition = getStr("steerCam_custom_glanceTransition", steerCam.defaults.glanceTransition),
     speedModEnable = getBool("steerCam_custom_speedModEnable", steerCam.defaults.speedModEnable),
     vertigo    = getBool("steerCam_custom_vertigo",    steerCam.defaults.vertigo),
     vertigoFov = getNum("steerCam_custom_vertigoFov",  steerCam.defaults.vertigoFov),
@@ -253,7 +255,7 @@ if not steerCam then
       glanceLeft = a.glanceLeft, glanceRight = a.glanceRight, glanceBack = a.glanceBack, glanceTime = a.glanceTime,
       glanceOffsetLeft = a.glanceOffsetLeft, glanceOffsetRight = a.glanceOffsetRight, glanceOffsetBack = a.glanceOffsetBack,
       glanceBackRoll = a.glanceBackRoll,
-      glanceCurve = a.glanceCurve,
+      glanceCurve = a.glanceCurve, glanceTransition = a.glanceTransition,
       speedModEnable = a.speedModEnable,
       vertigo = a.vertigo, vertigoFov = a.vertigoFov, vertigoDolly = a.vertigoDolly,
       speedRoll = a.speedRoll, rollAngle = a.rollAngle, speedRange = a.speedRange,
@@ -664,12 +666,25 @@ return function(...)
       self.glanceSide = targetSide
       self.glanceProg = 0
     end
-    local gt = c.glanceTime or 100
-    if gt <= 5 then
+    -- transition timing. "Fixed time": glanceTime is the whole tween, any angle.
+    -- "Constant speed": glanceTime is the time for a full 180deg head-turn, so this
+    -- move's duration scales with its yaw distance (a 90deg glance takes half as
+    -- long) -- a steady turn rate, like spinning your head. "None": snap instantly.
+    local mode = c.glanceTransition or "Fixed time"
+    local dur
+    if mode == "None" then
+      dur = 0
+    elseif mode == "Constant speed" then
+      local distDeg = math.abs(math.deg(tgtYaw - self.poseFromYaw))
+      dur = (c.glanceTime or 100) * (distDeg / 180)
+    else
+      dur = c.glanceTime or 100
+    end
+    if dur <= 5 then
       self.glanceProg = 1
       self.poseYaw, self.poseLat, self.poseRoll = tgtYaw, tgtLat, tgtRoll
     else
-      self.glanceProg = clamp01(self.glanceProg + dt * 1000 / gt)
+      self.glanceProg = clamp01(self.glanceProg + dt * 1000 / dur)
       local e = (easeCurves[c.glanceCurve] or easeExp)(self.glanceProg)
       self.poseYaw  = self.poseFromYaw  + (tgtYaw  - self.poseFromYaw)  * e
       self.poseLat  = self.poseFromLat  + (tgtLat  - self.poseFromLat)  * e
