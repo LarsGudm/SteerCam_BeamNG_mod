@@ -102,6 +102,9 @@ angular.module('beamng.apps')
           '<div class="sc-row"><span>FOV<span class="sc-tipsrc" ng-if="tips.camFov">{{tips.camFov}}</span><span class="sc-info" ng-if="tips.camFov">&#9432;</span></span>',
             '<input type="range" min="40" max="120" step="1" ng-model="cfg.camFov" ng-change="set(\'camFov\', cfg.camFov)" ng-disabled="locked">',
             '<b>{{cfg.camFov}}°</b></div>',
+          '<div class="sc-row"><span>Near clip<span class="sc-tipsrc" ng-if="tips.nearClip">{{tips.nearClip}}</span><span class="sc-info" ng-if="tips.nearClip">&#9432;</span></span>',
+            '<input type="range" min="0.01" max="0.1" step="0.01" ng-model="cfg.nearClip" ng-change="set(\'nearClip\', cfg.nearClip)" ng-disabled="locked">',
+            '<b>{{cfg.nearClip}}m</b></div>',
         '</div>',
 
         '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.steerEnable}" ng-click="toggleCollapse(\'steer\')"><span class="sc-tw" ng-class="{open:!collapsed.steer}">▸</span>Steering Input Pan<span class="sc-tipsrc" ng-if="tips.steer">{{tips.steer}}</span><span class="sc-info" ng-if="tips.steer">&#9432;</span></span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="setEnable(\'steer\',\'steerEnable\',cfg.steerEnable)" ng-disabled="locked"></div></div>',
@@ -244,6 +247,7 @@ angular.module('beamng.apps')
         camPitch: '',
         stableHorizon: '0 = horizon banks fully with the car; 100 = stays level (eases off on steep banks). Same as the game\'s Lock-roll-to-horizon.',
         camFov: '',
+        nearClip: 'How close to the camera things start drawing. Lower hides nearby geometry (e.g. the roof poking in at high FOV); too low can cause flicker on distant surfaces. Recommended is 0.02 - 0.05 m (Game native is 0.1 m).',
         angle: 'How far the view turns at full steering lock.',
         reach: 'How much steering reaches the full angle. Lower = more reactive to small inputs.',
         stiffness: 'How quickly the camera moves. Higher = snappier.',
@@ -335,7 +339,7 @@ angular.module('beamng.apps')
         bngApi.engineLua('if steerCam then steerCam.setMirror(' + (v ? 'true' : 'false') + ') end');
       };
       scope.cfg = {
-        camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0,
+        camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0, nearClip: 0.05,
         steerEnable: true,
         angle: 18, reach: 35, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
         glanceEnable: true,

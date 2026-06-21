@@ -41,7 +41,7 @@ if not steerCam then
   -- load, the base sanitizePreset fills missing keys from, and the seed for the
   -- Custom profile. The shipped default.json mirrors this for the dropdown entry.
   steerCam.defaults = {
-    camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0,
+    camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0, nearClip = 0.05,
     steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
     reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0, fadeFloor = 0.0,
     glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceBack = 0.0, glanceTime = 120.0,
@@ -60,7 +60,7 @@ if not steerCam then
     camUp = {-0.5, 0.5},
     camYaw = {-45, 45},
     camPitch = {-45, 45},
-    camFov = {40, 120}, stableHorizon = {0, 100},
+    camFov = {40, 120}, stableHorizon = {0, 100}, nearClip = {0.01, 0.2},
     angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150}, fadeFloor = {0, 100},
     reverseAngle = {0, 90}, reverseTime = {0, 3000},
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceBack = {-90, 90}, glanceTime = {0, 500},
@@ -152,6 +152,7 @@ if not steerCam then
     camPitch   = getNum("steerCam_custom_camPitch",   steerCam.defaults.camPitch),
     camFov     = getNum("steerCam_custom_camFov",     steerCam.defaults.camFov),
     stableHorizon = getNum("steerCam_custom_stableHorizon", steerCam.defaults.stableHorizon),
+    nearClip   = getNum("steerCam_custom_nearClip",   steerCam.defaults.nearClip),
     steerEnable = getBool("steerCam_custom_steerEnable", steerCam.defaults.steerEnable),
     angle      = getNum("steerCam_custom_angle",       steerCam.defaults.angle),
     reach      = getNum("steerCam_custom_reach",       steerCam.defaults.reach),
@@ -262,7 +263,7 @@ if not steerCam then
       modEnabled = steerCam.enabled,
       mirrorSeat = steerCam.mirrorSeat,
       camEnable = a.camEnable, camFwd = a.camFwd, camUp = a.camUp,
-      camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov, stableHorizon = a.stableHorizon,
+      camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov, stableHorizon = a.stableHorizon, nearClip = a.nearClip,
       steerEnable = a.steerEnable,
       angle = a.angle, reach = a.reach, stiffness = a.stiffness,
       reverseSteer = a.reverseSteer, reverseAngle = a.reverseAngle, reverseTime = a.reverseTime,
@@ -552,6 +553,10 @@ return function(...)
     -- speed-vertigo FOV stacks on top of the override and offsets ride along.
     if c.camEnable then
       if c.camFov and data.res.fov then data.res.fov = c.camFov end
+      -- near clip: the engine defaults this to ~0.1m before our update; pulling it
+      -- closer stops nearby geometry (e.g. the roof at high FOV) poking through. Too
+      -- low costs depth precision (distant z-fighting), hence the modest floor.
+      if c.nearClip and data.res.nearClip ~= nil then data.res.nearClip = c.nearClip end
       if (c.camFwd ~= 0 or c.camUp ~= 0) and data.veh ~= nil then
         gFwd:set(data.veh:getDirectionVector())     -- car forward (world)
         gUp:set(data.veh:getDirectionVectorUp())    -- car up (world)

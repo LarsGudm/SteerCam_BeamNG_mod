@@ -63,6 +63,10 @@ Controls (editable on Custom):
                                 game's "Lock roll to horizon" camera option.
   FOV               40-120 deg  field of view; overrides the camera's own FOV
                                 (def. 65). Speed vertigo stacks on top of this.
+  Near clip        0.01-0.2 m   how close to the camera things start drawing; lower
+                                hides nearby geometry (e.g. the roof poking in at high
+                                FOV). Def. 0.05 (game uses 0.1); too low can flicker
+                                distant surfaces.
 
   Steering Input Pan            (section) the steer-following turn
   Angle              0-90 deg   how far the view turns at full lock

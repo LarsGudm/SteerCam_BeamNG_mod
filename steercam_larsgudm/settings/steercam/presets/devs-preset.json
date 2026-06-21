@@ -9,6 +9,7 @@
   "camPitch": 0.0,
   "camFov": 65.0,
   "stableHorizon": 0.0,
+  "nearClip": 0.05,
 
   "steerEnable": true,
   "angle": 18.0,
