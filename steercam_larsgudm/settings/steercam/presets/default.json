@@ -24,9 +24,12 @@
   "glanceEnable": true,
   "glanceLeft": 115.0,
   "glanceRight": 115.0,
+  "glanceBack": 0.0,
   "glanceTime": 120.0,
   "glanceOffsetLeft": 0.10,
   "glanceOffsetRight": 0.10,
+  "glanceOffsetBack": 0.0,
+  "glanceBackRoll": 0.0,
   "glanceCurve": "Exponential",
 
   "speedModEnable": false,

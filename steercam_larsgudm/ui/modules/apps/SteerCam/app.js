@@ -25,7 +25,7 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-sec{font-weight:600;margin:4px 0 5px;color:#ffae6b;',
             'border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:2px}',
           '.steerCamApp .sc-row{display:flex;align-items:center;gap:7px;margin:5px 0}',
-          '.steerCamApp .sc-row>span{flex:0 0 84px}',
+          '.steerCamApp .sc-row>span{flex:0 0 84px;white-space:nowrap}',
           '.steerCamApp .sc-row input[type=range]{flex:1 1 auto;min-width:34px;accent-color:#ff7a18}',
           '.steerCamApp .sc-presets-row{display:flex;align-items:center;gap:7px;margin-bottom:8px}',
           '.steerCamApp .sc-presets-lbl{flex:0 0 auto;font-weight:700;font-size:12px;color:#ff7a18}',
@@ -52,16 +52,22 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-tw{display:inline-block;font-size:9px;color:#ff7a18;transition:transform .15s ease}',
           '.steerCamApp .sc-tw.open{transform:rotate(90deg)}',
           '.steerCamApp .sc-off{opacity:0.4;pointer-events:none}',
+          // dim a disabled section's header text without blocking its collapse click
+          '.steerCamApp .sc-sec-name.sc-dim{opacity:0.4}',
           '.steerCamApp .sc-hint{font-size:10px;color:#9a9aa0;margin-top:6px}',
           '.steerCamApp .sc-tipsrc{display:none}',
-          '.steerCamApp .sc-hintbar{position:sticky;bottom:0;margin-top:8px;padding:7px 0 2px;',
-            'background:rgba(18,18,20,0.97);border-top:1px solid rgba(255,255,255,0.14);',
-            'font-size:10px;line-height:1.35;color:#d8d8dc}',
+          // small ⓘ marker appended (dynamically, via ng-if) to anything with a tooltip
+          '.steerCamApp .sc-info{margin-left:3px;font-size:10px;color:#ff7a18;opacity:0.7;cursor:help}',
+          // hover bubble lives on <body> (escapes the panel overflow), so this rule
+          // is intentionally NOT scoped under .steerCamApp:
+          '.sc-bubble{position:fixed;z-index:99999;max-width:240px;background:#fff;color:#111;',
+            'font-size:13px;line-height:1.32;padding:6px 9px;border-radius:5px;',
+            'box-shadow:0 3px 12px rgba(0,0,0,0.45);pointer-events:none;display:none}',
         '</style>',
 
         '<div class="sc-title-row">',
           '<span class="sc-title">SteerCam</span>',
-          '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span></label>',
+          '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
         '</div>',
 
         '<div class="sc-presets-row">',
@@ -74,108 +80,117 @@ angular.module('beamng.apps')
           '</div>',
         '</div>',
 
-        '<label class="sc-mirror"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Driver seat side mirrors settings<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span></label>',
+        '<label class="sc-mirror"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Driver seat side mirrors settings<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span><span class="sc-info" ng-if="tips.mirror">&#9432;</span></label>',
 
-        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-click="toggleCollapse(\'cam\')"><span class="sc-tw" ng-class="{open:!collapsed.cam}">▸</span>Camera settings override<span class="sc-tipsrc" ng-if="tips.cam">{{tips.cam}}</span></span><input type="checkbox" ng-model="cfg.camEnable" ng-change="setEnable(\'cam\',\'camEnable\',cfg.camEnable)" ng-disabled="locked"></div></div>',
+        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.camEnable}" ng-click="toggleCollapse(\'cam\')"><span class="sc-tw" ng-class="{open:!collapsed.cam}">▸</span>Camera settings override<span class="sc-tipsrc" ng-if="tips.cam">{{tips.cam}}</span><span class="sc-info" ng-if="tips.cam">&#9432;</span></span><input type="checkbox" ng-model="cfg.camEnable" ng-change="setEnable(\'cam\',\'camEnable\',cfg.camEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.cam" ng-class="{\'sc-off\':!cfg.camEnable}">',
-          '<div class="sc-row"><span>Forward Offset<span class="sc-tipsrc" ng-if="tips.camFwd">{{tips.camFwd}}</span></span>',
+          '<div class="sc-row"><span>Forward Offset<span class="sc-tipsrc" ng-if="tips.camFwd">{{tips.camFwd}}</span><span class="sc-info" ng-if="tips.camFwd">&#9432;</span></span>',
             '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camFwd" ng-change="set(\'camFwd\', cfg.camFwd)" ng-disabled="locked">',
             '<b>{{cfg.camFwd}}m</b></div>',
-          '<div class="sc-row"><span>Vertical Offset<span class="sc-tipsrc" ng-if="tips.camUp">{{tips.camUp}}</span></span>',
+          '<div class="sc-row"><span>Vertical Offset<span class="sc-tipsrc" ng-if="tips.camUp">{{tips.camUp}}</span><span class="sc-info" ng-if="tips.camUp">&#9432;</span></span>',
             '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camUp" ng-change="set(\'camUp\', cfg.camUp)" ng-disabled="locked">',
             '<b>{{cfg.camUp}}m</b></div>',
-          '<div class="sc-row"><span>Rotate L/R<span class="sc-tipsrc" ng-if="tips.camYaw">{{tips.camYaw}}</span></span>',
+          '<div class="sc-row"><span>Rotate L/R<span class="sc-tipsrc" ng-if="tips.camYaw">{{tips.camYaw}}</span><span class="sc-info" ng-if="tips.camYaw">&#9432;</span></span>',
             '<input type="range" min="-45" max="45" step="1" ng-model="cfg.camYaw" ng-change="set(\'camYaw\', cfg.camYaw)" ng-disabled="locked">',
             '<b>{{cfg.camYaw}}°</b></div>',
-          '<div class="sc-row"><span>Rotate D/U<span class="sc-tipsrc" ng-if="tips.camPitch">{{tips.camPitch}}</span></span>',
+          '<div class="sc-row"><span>Rotate D/U<span class="sc-tipsrc" ng-if="tips.camPitch">{{tips.camPitch}}</span><span class="sc-info" ng-if="tips.camPitch">&#9432;</span></span>',
             '<input type="range" min="-45" max="45" step="1" ng-model="cfg.camPitch" ng-change="set(\'camPitch\', cfg.camPitch)" ng-disabled="locked">',
             '<b>{{cfg.camPitch}}°</b></div>',
-          '<div class="sc-row"><span>Horizon lock<span class="sc-tipsrc" ng-if="tips.stableHorizon">{{tips.stableHorizon}}</span></span>',
+          '<div class="sc-row"><span>Horizon lock<span class="sc-tipsrc" ng-if="tips.stableHorizon">{{tips.stableHorizon}}</span><span class="sc-info" ng-if="tips.stableHorizon">&#9432;</span></span>',
             '<input type="range" min="0" max="100" step="1" ng-model="cfg.stableHorizon" ng-change="set(\'stableHorizon\', cfg.stableHorizon)" ng-disabled="locked">',
             '<b>{{cfg.stableHorizon}}%</b></div>',
-          '<div class="sc-row"><span>FOV<span class="sc-tipsrc" ng-if="tips.camFov">{{tips.camFov}}</span></span>',
+          '<div class="sc-row"><span>FOV<span class="sc-tipsrc" ng-if="tips.camFov">{{tips.camFov}}</span><span class="sc-info" ng-if="tips.camFov">&#9432;</span></span>',
             '<input type="range" min="40" max="120" step="1" ng-model="cfg.camFov" ng-change="set(\'camFov\', cfg.camFov)" ng-disabled="locked">',
             '<b>{{cfg.camFov}}°</b></div>',
         '</div>',
 
-        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-click="toggleCollapse(\'steer\')"><span class="sc-tw" ng-class="{open:!collapsed.steer}">▸</span>Steering Input Pan<span class="sc-tipsrc" ng-if="tips.steer">{{tips.steer}}</span></span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="setEnable(\'steer\',\'steerEnable\',cfg.steerEnable)" ng-disabled="locked"></div></div>',
+        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.steerEnable}" ng-click="toggleCollapse(\'steer\')"><span class="sc-tw" ng-class="{open:!collapsed.steer}">▸</span>Steering Input Pan<span class="sc-tipsrc" ng-if="tips.steer">{{tips.steer}}</span><span class="sc-info" ng-if="tips.steer">&#9432;</span></span><input type="checkbox" ng-model="cfg.steerEnable" ng-change="setEnable(\'steer\',\'steerEnable\',cfg.steerEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.steer" ng-class="{\'sc-off\':!cfg.steerEnable}">',
-          '<div class="sc-row"><span>Angle<span class="sc-tipsrc" ng-if="tips.angle">{{tips.angle}}</span></span>',
+          '<div class="sc-row"><span>Angle<span class="sc-tipsrc" ng-if="tips.angle">{{tips.angle}}</span><span class="sc-info" ng-if="tips.angle">&#9432;</span></span>',
             '<input type="range" min="0" max="90" step="1" ng-model="cfg.angle" ng-change="set(\'angle\', cfg.angle)" ng-disabled="locked">',
             '<b>{{cfg.angle}}°</b></div>',
-          '<div class="sc-row"><span>Steering range<span class="sc-tipsrc" ng-if="tips.reach">{{tips.reach}}</span></span>',
+          '<div class="sc-row"><span>Steering range<span class="sc-tipsrc" ng-if="tips.reach">{{tips.reach}}</span><span class="sc-info" ng-if="tips.reach">&#9432;</span></span>',
             '<input type="range" min="10" max="100" step="5" ng-model="cfg.reach" ng-change="set(\'reach\', cfg.reach)" ng-disabled="locked">',
             '<b>{{cfg.reach}}%</b></div>',
-          '<div class="sc-row"><span>Stiffness<span class="sc-tipsrc" ng-if="tips.stiffness">{{tips.stiffness}}</span></span>',
+          '<div class="sc-row"><span>Stiffness<span class="sc-tipsrc" ng-if="tips.stiffness">{{tips.stiffness}}</span><span class="sc-info" ng-if="tips.stiffness">&#9432;</span></span>',
             '<input type="range" min="1" max="40" step="1" ng-model="cfg.stiffness" ng-change="set(\'stiffness\', cfg.stiffness)" ng-disabled="locked">',
             '<b>{{cfg.stiffness}}</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.reverseSteer" ng-change="set(\'reverseSteer\', cfg.reverseSteer)" ng-disabled="locked"> Mirror turn direction when reversing<span class="sc-tipsrc" ng-if="tips.reverseSteer">{{tips.reverseSteer}}</span></label></div>',
-          '<div class="sc-row" ng-show="cfg.reverseSteer"><span>Reverse angle<span class="sc-tipsrc" ng-if="tips.reverseAngle">{{tips.reverseAngle}}</span></span>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.reverseSteer" ng-change="set(\'reverseSteer\', cfg.reverseSteer)" ng-disabled="locked"> Mirror turn direction when reversing<span class="sc-tipsrc" ng-if="tips.reverseSteer">{{tips.reverseSteer}}</span><span class="sc-info" ng-if="tips.reverseSteer">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-show="cfg.reverseSteer"><span>Reverse angle<span class="sc-tipsrc" ng-if="tips.reverseAngle">{{tips.reverseAngle}}</span><span class="sc-info" ng-if="tips.reverseAngle">&#9432;</span></span>',
             '<input type="range" min="0" max="90" step="1" ng-model="cfg.reverseAngle" ng-change="set(\'reverseAngle\', cfg.reverseAngle)" ng-disabled="locked">',
             '<b>{{cfg.reverseAngle}}°</b></div>',
-          '<div class="sc-row" ng-show="cfg.reverseSteer"><span>Reverse blend<span class="sc-tipsrc" ng-if="tips.reverseTime">{{tips.reverseTime}}</span></span>',
+          '<div class="sc-row" ng-show="cfg.reverseSteer"><span>Reverse blend<span class="sc-tipsrc" ng-if="tips.reverseTime">{{tips.reverseTime}}</span><span class="sc-info" ng-if="tips.reverseTime">&#9432;</span></span>',
             '<input type="range" min="0" max="3000" step="50" ng-model="cfg.reverseTime" ng-change="set(\'reverseTime\', cfg.reverseTime)" ng-disabled="locked">',
             '<b>{{cfg.reverseTime}}ms</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedFade" ng-change="set(\'speedFade\', cfg.speedFade)" ng-disabled="locked"> Fade in with speed<span class="sc-tipsrc" ng-if="tips.speedFade">{{tips.speedFade}}</span></label></div>',
-          '<div class="sc-row" ng-show="cfg.speedFade"><span>Fade speed<span class="sc-tipsrc" ng-if="tips.fadeSpeed">{{tips.fadeSpeed}}</span></span>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedFade" ng-change="set(\'speedFade\', cfg.speedFade)" ng-disabled="locked"> Fade in with speed<span class="sc-tipsrc" ng-if="tips.speedFade">{{tips.speedFade}}</span><span class="sc-info" ng-if="tips.speedFade">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-show="cfg.speedFade"><span>Fade speed<span class="sc-tipsrc" ng-if="tips.fadeSpeed">{{tips.fadeSpeed}}</span><span class="sc-info" ng-if="tips.fadeSpeed">&#9432;</span></span>',
             '<input type="range" min="5" max="150" step="5" ng-model="cfg.fadeSpeed" ng-change="set(\'fadeSpeed\', cfg.fadeSpeed)" ng-disabled="locked">',
             '<b style="flex:0 0 64px">{{cfg.fadeSpeed}} km/h</b></div>',
-          '<div class="sc-row" ng-show="cfg.speedFade"><span>Standstill turn<span class="sc-tipsrc" ng-if="tips.fadeFloor">{{tips.fadeFloor}}</span></span>',
+          '<div class="sc-row" ng-show="cfg.speedFade"><span>Standstill turn<span class="sc-tipsrc" ng-if="tips.fadeFloor">{{tips.fadeFloor}}</span><span class="sc-info" ng-if="tips.fadeFloor">&#9432;</span></span>',
             '<input type="range" min="0" max="100" step="5" ng-model="cfg.fadeFloor" ng-change="set(\'fadeFloor\', cfg.fadeFloor)" ng-disabled="locked">',
             '<b>{{cfg.fadeFloor}}%</b></div>',
         '</div>',
 
-        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-click="toggleCollapse(\'glance\')"><span class="sc-tw" ng-class="{open:!collapsed.glance}">▸</span>Blind-spot glance<span class="sc-tipsrc" ng-if="tips.glance">{{tips.glance}}</span></span><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="setEnable(\'glance\',\'glanceEnable\',cfg.glanceEnable)" ng-disabled="locked"></div></div>',
+        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.glanceEnable}" ng-click="toggleCollapse(\'glance\')"><span class="sc-tw" ng-class="{open:!collapsed.glance}">▸</span>Blind-spot glance<span class="sc-tipsrc" ng-if="tips.glance">{{tips.glance}}</span><span class="sc-info" ng-if="tips.glance">&#9432;</span></span><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="setEnable(\'glance\',\'glanceEnable\',cfg.glanceEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.glance" ng-class="{\'sc-off\':!cfg.glanceEnable}">',
-          '<div class="sc-row"><span>Left angle<span class="sc-tipsrc" ng-if="tips.glanceLeft">{{tips.glanceLeft}}</span></span>',
-            '<input type="range" min="0" max="170" step="5" ng-model="cfg.glanceLeft" ng-change="set(\'glanceLeft\', cfg.glanceLeft)" ng-disabled="locked">',
+          '<div class="sc-glance-btns">',
+            '<button ng-class="{active: glanceSide===\'left\'}" ng-click="toggleGlance(\'left\')">Preview left</button>',
+            '<button ng-class="{active: glanceSide===\'back\'}" ng-click="toggleGlance(\'back\')">Preview back</button>',
+            '<button ng-class="{active: glanceSide===\'right\'}" ng-click="toggleGlance(\'right\')">Preview right</button>',
+          '</div>',
+          '<div class="sc-hint">Preview holds the glance so you can tune the angle. Needs the SteerCam view active (press C).</div>',
+          '<div class="sc-row"><span>Left angle<span class="sc-tipsrc" ng-if="tips.glanceLeft">{{tips.glanceLeft}}</span><span class="sc-info" ng-if="tips.glanceLeft">&#9432;</span></span>',
+            '<input type="range" min="0" max="170" step="1" ng-model="cfg.glanceLeft" ng-change="set(\'glanceLeft\', cfg.glanceLeft)" ng-disabled="locked">',
             '<b>{{cfg.glanceLeft}}°</b></div>',
-          '<div class="sc-row"><span>Right angle<span class="sc-tipsrc" ng-if="tips.glanceRight">{{tips.glanceRight}}</span></span>',
-            '<input type="range" min="0" max="170" step="5" ng-model="cfg.glanceRight" ng-change="set(\'glanceRight\', cfg.glanceRight)" ng-disabled="locked">',
+          '<div class="sc-row"><span>Left offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetLeft">{{tips.glanceOffsetLeft}}</span><span class="sc-info" ng-if="tips.glanceOffsetLeft">&#9432;</span></span>',
+            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetLeft" ng-change="set(\'glanceOffsetLeft\', cfg.glanceOffsetLeft)" ng-disabled="locked">',
+            '<b>{{cfg.glanceOffsetLeft}}m</b></div>',
+          '<div class="sc-row"><span>Right angle<span class="sc-tipsrc" ng-if="tips.glanceRight">{{tips.glanceRight}}</span><span class="sc-info" ng-if="tips.glanceRight">&#9432;</span></span>',
+            '<input type="range" min="0" max="170" step="1" ng-model="cfg.glanceRight" ng-change="set(\'glanceRight\', cfg.glanceRight)" ng-disabled="locked">',
             '<b>{{cfg.glanceRight}}°</b></div>',
-          '<div class="sc-row"><span>Glance time<span class="sc-tipsrc" ng-if="tips.glanceTime">{{tips.glanceTime}}</span></span>',
+          '<div class="sc-row"><span>Right offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetRight">{{tips.glanceOffsetRight}}</span><span class="sc-info" ng-if="tips.glanceOffsetRight">&#9432;</span></span>',
+            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetRight" ng-change="set(\'glanceOffsetRight\', cfg.glanceOffsetRight)" ng-disabled="locked">',
+            '<b>{{cfg.glanceOffsetRight}}m</b></div>',
+          '<div class="sc-row"><span>Back angle<span class="sc-tipsrc" ng-if="tips.glanceBack">{{tips.glanceBack}}</span><span class="sc-info" ng-if="tips.glanceBack">&#9432;</span></span>',
+            '<input type="range" min="-90" max="90" step="1" ng-model="cfg.glanceBack" ng-change="set(\'glanceBack\', cfg.glanceBack)" ng-disabled="locked">',
+            '<b>{{cfg.glanceBack}}°</b></div>',
+          '<div class="sc-row"><span>Back offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetBack">{{tips.glanceOffsetBack}}</span><span class="sc-info" ng-if="tips.glanceOffsetBack">&#9432;</span></span>',
+            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetBack" ng-change="set(\'glanceOffsetBack\', cfg.glanceOffsetBack)" ng-disabled="locked">',
+            '<b>{{cfg.glanceOffsetBack}}m</b></div>',
+          '<div class="sc-row"><span>Back roll<span class="sc-tipsrc" ng-if="tips.glanceBackRoll">{{tips.glanceBackRoll}}</span><span class="sc-info" ng-if="tips.glanceBackRoll">&#9432;</span></span>',
+            '<input type="range" min="-15" max="15" step="1" ng-model="cfg.glanceBackRoll" ng-change="set(\'glanceBackRoll\', cfg.glanceBackRoll)" ng-disabled="locked">',
+            '<b>{{cfg.glanceBackRoll}}°</b></div>',
+          '<div class="sc-row"><span>Glance time<span class="sc-tipsrc" ng-if="tips.glanceTime">{{tips.glanceTime}}</span><span class="sc-info" ng-if="tips.glanceTime">&#9432;</span></span>',
             '<input type="range" min="0" max="500" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked">',
             '<b>{{cfg.glanceTime}}ms</b></div>',
-          '<div class="sc-row"><span>Glance curve<span class="sc-tipsrc" ng-if="tips.glanceCurve">{{tips.glanceCurve}}</span></span>',
+          '<div class="sc-row"><span>Glance curve<span class="sc-tipsrc" ng-if="tips.glanceCurve">{{tips.glanceCurve}}</span><span class="sc-info" ng-if="tips.glanceCurve">&#9432;</span></span>',
             '<div class="sc-dd">',
               '<button class="sc-dd-head" ng-click="toggleDD(\'curve\')" ng-disabled="locked">{{curveLabel(cfg.glanceCurve)}}<span class="sc-dd-arr">▾</span></button>',
               '<div class="sc-dd-list" ng-show="openDD===\'curve\'">',
                 '<div class="sc-dd-opt" ng-repeat="o in curveOptions" ng-class="{active: cfg.glanceCurve===o.k}" ng-click="setCurve(o.k); openDD=null">{{o.l}}</div>',
               '</div>',
             '</div></div>',
-          '<div class="sc-row"><span>Left offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetLeft">{{tips.glanceOffsetLeft}}</span></span>',
-            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetLeft" ng-change="set(\'glanceOffsetLeft\', cfg.glanceOffsetLeft)" ng-disabled="locked">',
-            '<b>{{cfg.glanceOffsetLeft}}m</b></div>',
-          '<div class="sc-row"><span>Right offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetRight">{{tips.glanceOffsetRight}}</span></span>',
-            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetRight" ng-change="set(\'glanceOffsetRight\', cfg.glanceOffsetRight)" ng-disabled="locked">',
-            '<b>{{cfg.glanceOffsetRight}}m</b></div>',
-          '<div class="sc-glance-btns">',
-            '<button ng-class="{active: glanceSide===\'left\'}" ng-click="toggleGlance(\'left\')">Preview left</button>',
-            '<button ng-class="{active: glanceSide===\'right\'}" ng-click="toggleGlance(\'right\')">Preview right</button>',
-          '</div>',
-          '<div class="sc-hint">Preview holds the glance so you can tune the angle. Needs the SteerCam view active (press C).</div>',
         '</div>',
 
-        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-click="toggleCollapse(\'speed\')"><span class="sc-tw" ng-class="{open:!collapsed.speed}">▸</span>Speed modifiers<span class="sc-tipsrc" ng-if="tips.speed">{{tips.speed}}</span></span><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="setEnable(\'speed\',\'speedModEnable\',cfg.speedModEnable)" ng-disabled="locked"></div></div>',
+        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.speedModEnable}" ng-click="toggleCollapse(\'speed\')"><span class="sc-tw" ng-class="{open:!collapsed.speed}">▸</span>Speed modifiers<span class="sc-tipsrc" ng-if="tips.speed">{{tips.speed}}</span><span class="sc-info" ng-if="tips.speed">&#9432;</span></span><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="setEnable(\'speed\',\'speedModEnable\',cfg.speedModEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.speed" ng-class="{\'sc-off\':!cfg.speedModEnable}">',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.vertigo" ng-change="set(\'vertigo\', cfg.vertigo)" ng-disabled="locked"> Speed vertigo (FOV)<span class="sc-tipsrc" ng-if="tips.vertigo">{{tips.vertigo}}</span></label></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>FOV change<span class="sc-tipsrc" ng-if="tips.vertigoFov">{{tips.vertigoFov}}</span></span>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.vertigo" ng-change="set(\'vertigo\', cfg.vertigo)" ng-disabled="locked"> Speed vertigo (FOV)<span class="sc-tipsrc" ng-if="tips.vertigo">{{tips.vertigo}}</span><span class="sc-info" ng-if="tips.vertigo">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>FOV change<span class="sc-tipsrc" ng-if="tips.vertigoFov">{{tips.vertigoFov}}</span><span class="sc-info" ng-if="tips.vertigoFov">&#9432;</span></span>',
             '<input type="range" min="0" max="40" step="1" ng-model="cfg.vertigoFov" ng-change="set(\'vertigoFov\', cfg.vertigoFov)" ng-disabled="locked || !cfg.vertigo">',
             '<b>{{cfg.vertigoFov}}°</b></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>Dolly depth<span class="sc-tipsrc" ng-if="tips.vertigoDolly">{{tips.vertigoDolly}}</span></span>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>Dolly depth<span class="sc-tipsrc" ng-if="tips.vertigoDolly">{{tips.vertigoDolly}}</span><span class="sc-info" ng-if="tips.vertigoDolly">&#9432;</span></span>',
             '<input type="range" min="0" max="1.5" step="0.01" ng-model="cfg.vertigoDolly" ng-change="set(\'vertigoDolly\', cfg.vertigoDolly)" ng-disabled="locked || !cfg.vertigo">',
             '<b>{{cfg.vertigoDolly}}m</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedRoll" ng-change="set(\'speedRoll\', cfg.speedRoll)" ng-disabled="locked"> Speed camera roll<span class="sc-tipsrc" ng-if="tips.speedRoll">{{tips.speedRoll}}</span></label></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll change<span class="sc-tipsrc" ng-if="tips.rollAngle">{{tips.rollAngle}}</span></span>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedRoll" ng-change="set(\'speedRoll\', cfg.speedRoll)" ng-disabled="locked"> Speed camera roll<span class="sc-tipsrc" ng-if="tips.speedRoll">{{tips.speedRoll}}</span><span class="sc-info" ng-if="tips.speedRoll">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll change<span class="sc-tipsrc" ng-if="tips.rollAngle">{{tips.rollAngle}}</span><span class="sc-info" ng-if="tips.rollAngle">&#9432;</span></span>',
             '<input type="range" min="0" max="20" step="0.5" ng-model="cfg.rollAngle" ng-change="set(\'rollAngle\', cfg.rollAngle)" ng-disabled="locked || !cfg.speedRoll">',
             '<b>{{cfg.rollAngle}}°</b></div>',
-          '<div class="sc-row"><span>Speed range<span class="sc-tipsrc" ng-if="tips.speedRange">{{tips.speedRange}}</span></span>',
+          '<div class="sc-row"><span>Speed range<span class="sc-tipsrc" ng-if="tips.speedRange">{{tips.speedRange}}</span><span class="sc-info" ng-if="tips.speedRange">&#9432;</span></span>',
             '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedRange" ng-change="set(\'speedRange\', cfg.speedRange)" ng-disabled="locked">',
             '<b style="flex:0 0 64px">{{cfg.speedRange}} km/h</b></div>',
         '</div>',
 
         '<div class="sc-hint" ng-show="locked">Default is locked. Switch to Custom to edit.</div>',
-        '<div class="sc-hintbar">{{hint || \'Hover a setting or category for a description\'}}</div>',
       '</div>'
     ].join(''),
     replace: true,
@@ -247,11 +262,10 @@ angular.module('beamng.apps')
       // header text toggles the twirl only; the checkbox toggles enable
       scope.toggleCollapse = function (sec) { scope.collapsed[sec] = !scope.collapsed[sec]; };
 
-      // section enable checkbox: toggle the feature, and auto-collapse when turning
-      // it OFF. Turning it back ON never auto-expands (open it via the header).
+      // section enable checkbox: toggle the feature only. Collapsing is left to
+      // the header twisty so disabling a section doesn't hide its settings.
       scope.setEnable = function (sec, key, val) {
         scope.set(key, val);
-        if (!val) { scope.collapsed[sec] = true; }
       };
 
       // global mod on/off; works on any profile (not gated by the preset lock)
@@ -268,8 +282,8 @@ angular.module('beamng.apps')
         steerEnable: true,
         angle: 18, reach: 35, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
         glanceEnable: true,
-        glanceLeft: 115, glanceRight: 115, glanceTime: 120, glanceCurve: 'Exponential',
-        glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10,
+        glanceLeft: 115, glanceRight: 115, glanceBack: 0, glanceTime: 120, glanceCurve: 'Exponential',
+        glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10, glanceOffsetBack: 0, glanceBackRoll: 0,
         speedModEnable: true,
         vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160
       };
@@ -286,12 +300,15 @@ angular.module('beamng.apps')
         }
       }
 
+      // reflect the LIVE glance (hold keybind > toggle keybind > UI preview) so the
+      // Preview buttons highlight whenever a glance is active -- from ANY source --
+      // and clear the instant it ends. Polled, so keybind glances update the UI too.
       function syncGlance() {
         bngApi.engineLua('steerCam and steerCam.getGlanceState() or nil', function (st) {
           if (st && typeof st === 'object') {
-            scope.$evalAsync(function () {
-              var t = st.toggle;
-              scope.glanceSide = (t === 1) ? 'left' : (t === -1) ? 'right' : 'none';
+            scope.$applyAsync(function () {
+              var s = st.hold || st.toggle || st.preview || 0;
+              scope.glanceSide = (s === 1) ? 'left' : (s === -1) ? 'right' : (s === 2) ? 'back' : 'none';
             });
           }
         });
@@ -325,13 +342,10 @@ angular.module('beamng.apps')
               scope.locked = (scope.preset !== 'Custom');
               if (typeof cfg.modEnabled === 'boolean') { scope.modEnabled = cfg.modEnabled; }
               if (typeof cfg.mirrorSeat === 'boolean') { scope.mirrorSeat = cfg.mirrorSeat; }
-              // disabled sections start collapsed; enabled ones start open
-              scope.collapsed = {
-                cam: !scope.cfg.camEnable,
-                steer: !scope.cfg.steerEnable,
-                glance: !scope.cfg.glanceEnable,
-                speed: !scope.cfg.speedModEnable
-              };
+              // collapse state is independent of enable state; keep the defaults
+              // (Speed modifiers collapsed, the rest open) so toggling a section
+              // off never hides its settings.
+              scope.collapsed = { cam: false, steer: false, glance: false, speed: true };
             });
           }
         });
@@ -381,35 +395,79 @@ angular.module('beamng.apps')
       document.addEventListener('mousedown', ddOutside, true);
       scope.$on('$destroy', function () { document.removeEventListener('mousedown', ddOutside, true); });
 
-      // Hover hints: show the (hidden) .sc-tipsrc text of whatever you're hovering
-      // in the sticky hint bar. md-tooltip wouldn't position correctly in our app,
-      // so we route the same tips text into one fixed bar instead. The last hint
-      // stays shown while you drag that control's slider (only updates on a new tip).
-      scope.hint = '';
-      var lastTip = '';
-      function tipFor(node) {
+      // Hover bubble: a white tooltip that STICKS TO THE CURSOR (below-right so the
+      // pointer doesn't cover it) for whichever labelled control you're hovering, and
+      // vanishes the moment you leave it. Reads the hidden .sc-tipsrc carrier text.
+      // Lives on <body> so the panel's overflow can't clip it. (md-tooltip mis-
+      // positioned in our app, so this is our own.)
+      var bubble = document.createElement('div');
+      bubble.className = 'sc-bubble';
+      document.body.appendChild(bubble);
+      var TIP_DELAY = 500;            // ms to hover before the bubble appears
+      var tipTimer = null, tipHostEl = null, tipText = '';
+      var mx = 0, my = 0;            // latest cursor position
+      function clearTipTimer() { if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; } }
+      function hideBubble() { clearTipTimer(); tipHostEl = null; bubble.style.display = 'none'; }
+      function placeBubble() {       // follow the cursor, clamped to stay on-screen
+        var bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+        var x = mx + 16, y = my + 18;
+        if (x + bw > window.innerWidth - 4) { x = mx - bw - 16; }
+        if (y + bh > window.innerHeight - 4) { y = my - bh - 16; }
+        if (x < 4) { x = 4; }
+        if (y < 4) { y = 4; }
+        bubble.style.left = x + 'px';
+        bubble.style.top = y + 'px';
+      }
+      function tipHost(node) {
         while (node && node !== element[0]) {
           var kids = node.children;
           if (kids) {
             for (var i = 0; i < kids.length; i++) {
               if (kids[i].classList && kids[i].classList.contains('sc-tipsrc')) {
-                return (kids[i].textContent || '').trim();
+                return { host: node, text: (kids[i].textContent || '').trim() };
               }
             }
           }
           node = node.parentNode;
         }
-        return '';
+        return null;
       }
       function onHover(e) {
-        var t = tipFor(e.target);
-        if (t && t !== lastTip) {
-          lastTip = t;
-          scope.$evalAsync(function () { scope.hint = t; });
+        var h = tipHost(e.target);
+        if (h && h.text) {
+          if (h.host === tipHostEl) { return; }   // same control: already armed/showing
+          tipHostEl = h.host;
+          tipText = h.text;
+          clearTipTimer();
+          bubble.style.display = 'none';
+          tipTimer = setTimeout(function () {      // show after a hover dwell, at the cursor
+            bubble.textContent = tipText;
+            bubble.style.display = 'block';
+            placeBubble();
+          }, TIP_DELAY);
+        } else {
+          hideBubble();
         }
       }
+      function onMove(e) {
+        mx = e.clientX; my = e.clientY;
+        if (bubble.style.display === 'block') { placeBubble(); }
+      }
       element[0].addEventListener('mouseover', onHover, true);
-      scope.$on('$destroy', function () { element[0].removeEventListener('mouseover', onHover, true); });
+      element[0].addEventListener('mousemove', onMove, true);
+      element[0].addEventListener('mouseleave', hideBubble);
+      scope.$on('$destroy', function () {
+        element[0].removeEventListener('mouseover', onHover, true);
+        element[0].removeEventListener('mousemove', onMove, true);
+        element[0].removeEventListener('mouseleave', hideBubble);
+        clearTipTimer();
+        if (bubble.parentNode) { bubble.parentNode.removeChild(bubble); }
+      });
+
+      // poll the glance preview state so the Preview buttons un-highlight when a
+      // glance keybind cancels the preview (Lua clears it; the UI can't know otherwise)
+      var glancePoll = setInterval(syncGlance, 200);
+      scope.$on('$destroy', function () { clearInterval(glancePoll); });
 
       element.ready(function () {
         load();

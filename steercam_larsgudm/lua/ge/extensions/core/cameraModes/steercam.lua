@@ -44,8 +44,8 @@ if not steerCam then
     camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0,
     steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
     reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0, fadeFloor = 0.0,
-    glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceTime = 120.0,
-    glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceCurve = "Exponential",
+    glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceBack = 0.0, glanceTime = 120.0,
+    glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceOffsetBack = 0.0, glanceBackRoll = 0.0, glanceCurve = "Exponential",
     speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
     speedRoll = false, rollAngle = 5.0, speedRange = 160.0,
   }
@@ -60,8 +60,8 @@ if not steerCam then
     camFov = {40, 120}, stableHorizon = {0, 100},
     angle = {0, 90}, reach = {10, 100}, stiffness = {1, 40}, fadeSpeed = {5, 150}, fadeFloor = {0, 100},
     reverseAngle = {0, 90}, reverseTime = {0, 3000},
-    glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceTime = {0, 500},
-    glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5},
+    glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceBack = {-90, 90}, glanceTime = {0, 500},
+    glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5}, glanceOffsetBack = {-0.5, 0.5}, glanceBackRoll = {-15, 15},
     vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
   }
   local bools  = {
@@ -161,9 +161,12 @@ if not steerCam then
     glanceEnable = getBool("steerCam_custom_glanceEnable", steerCam.defaults.glanceEnable),
     glanceLeft  = getNum("steerCam_custom_glanceLeft",   steerCam.defaults.glanceLeft),
     glanceRight = getNum("steerCam_custom_glanceRight",  steerCam.defaults.glanceRight),
+    glanceBack  = getNum("steerCam_custom_glanceBack",   steerCam.defaults.glanceBack),
     glanceTime  = getNum("steerCam_custom_glanceTime",   steerCam.defaults.glanceTime),
     glanceOffsetLeft  = getNum("steerCam_custom_glanceOffsetLeft",  steerCam.defaults.glanceOffsetLeft),
     glanceOffsetRight = getNum("steerCam_custom_glanceOffsetRight", steerCam.defaults.glanceOffsetRight),
+    glanceOffsetBack  = getNum("steerCam_custom_glanceOffsetBack",  steerCam.defaults.glanceOffsetBack),
+    glanceBackRoll    = getNum("steerCam_custom_glanceBackRoll",    steerCam.defaults.glanceBackRoll),
     glanceCurve = getStr("steerCam_custom_glanceCurve", steerCam.defaults.glanceCurve),
     speedModEnable = getBool("steerCam_custom_speedModEnable", steerCam.defaults.speedModEnable),
     vertigo    = getBool("steerCam_custom_vertigo",    steerCam.defaults.vertigo),
@@ -247,8 +250,9 @@ if not steerCam then
       reverseSteer = a.reverseSteer, reverseAngle = a.reverseAngle, reverseTime = a.reverseTime,
       speedFade = a.speedFade, fadeSpeed = a.fadeSpeed, fadeFloor = a.fadeFloor,
       glanceEnable = a.glanceEnable,
-      glanceLeft = a.glanceLeft, glanceRight = a.glanceRight, glanceTime = a.glanceTime,
-      glanceOffsetLeft = a.glanceOffsetLeft, glanceOffsetRight = a.glanceOffsetRight,
+      glanceLeft = a.glanceLeft, glanceRight = a.glanceRight, glanceBack = a.glanceBack, glanceTime = a.glanceTime,
+      glanceOffsetLeft = a.glanceOffsetLeft, glanceOffsetRight = a.glanceOffsetRight, glanceOffsetBack = a.glanceOffsetBack,
+      glanceBackRoll = a.glanceBackRoll,
       glanceCurve = a.glanceCurve,
       speedModEnable = a.speedModEnable,
       vertigo = a.vertigo, vertigoFov = a.vertigoFov, vertigoDolly = a.vertigoDolly,
@@ -265,46 +269,56 @@ if not steerCam then
   end
 
   -- ----- Blind-spot glance runtime ------------------------------------------
-  -- Side convention: left = +1, right = -1 (matches steer-left = positive yaw).
-  steerCam.glanceHoldSide   = 0   -- held key: -1 right / 0 none / +1 left
-  steerCam.glanceToggleSide = 0   -- latched side (toggle binding / UI preview)
+  -- Side convention: left = +1, right = -1, back = 2 (0 = none). Left/right match
+  -- steer-left = positive yaw; back is ~180deg with the camera re-centred.
+  steerCam.glanceHoldSide   = 0   -- held key
+  steerCam.glanceToggleSide = 0   -- latched side from the TOGGLE keybind
+  steerCam.glancePreview    = 0   -- latched side from the UI Preview buttons -- kept
+                                  -- separate so using ANY keybind cancels the preview
 
   local function sideNum(s)
     if s == "left"  or s == 1  then return 1  end
     if s == "right" or s == -1 then return -1 end
+    if s == "back"  or s == 2  then return 2  end
     return 0
   end
   local function truthy(v) return v == true or v == 1 or v == "true" end
 
-  -- hold bindings: glance while the key is down, return on release
+  -- hold bindings: glance while the key is down, return on release. Using a keybind
+  -- cancels any UI Preview latch so you can immediately test the real binding.
   function steerCam.glanceHold(side, down)
     local s = sideNum(side); if s == 0 then return end
     if truthy(down) then
+      steerCam.glancePreview = 0
       steerCam.glanceHoldSide = s
     elseif steerCam.glanceHoldSide == s then
       steerCam.glanceHoldSide = 0
     end
   end
 
-  -- toggle bindings: flip the latched glance for a side
+  -- toggle bindings: flip the latched glance for a side (also cancels the preview)
   function steerCam.glanceToggle(side)
     local s = sideNum(side); if s == 0 then return end
+    steerCam.glancePreview = 0
     steerCam.glanceToggleSide = (steerCam.glanceToggleSide == s) and 0 or s
   end
 
-  -- UI preview buttons: set the latched glance explicitly
+  -- UI preview buttons: latch a glance for tuning. Its own state, so a keybind clears
+  -- it; a preview also clears any toggle latch so they don't fight.
   function steerCam.glanceSet(side, on)
     local s = sideNum(side); if s == 0 then return end
     if truthy(on) then
-      steerCam.glanceToggleSide = s
-    elseif steerCam.glanceToggleSide == s then
       steerCam.glanceToggleSide = 0
+      steerCam.glancePreview = s
+    elseif steerCam.glancePreview == s then
+      steerCam.glancePreview = 0
     end
   end
 
-  -- UI: read latched/held state so the app can highlight the active side
+  -- UI: read latched/held state so the app can highlight the active side. `preview`
+  -- drives the Preview buttons and drops to 0 the moment a keybind is used.
   function steerCam.getGlanceState()
-    return { hold = steerCam.glanceHoldSide, toggle = steerCam.glanceToggleSide }
+    return { hold = steerCam.glanceHoldSide, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview }
   end
 end
 
@@ -407,6 +421,7 @@ return function(...)
   o.glanceFrom = 0; o.glanceProg = 1; o.glanceTargetVal = 0      -- glance tween state
   o.glanceYaw = 0   -- target yaw of the active glance (rad)
   o.glanceLat = 0   -- target lateral lean of the active glance (m, + = car right)
+  o.glanceRoll = 0  -- target roll (deg) of the active glance -- back glance head-tilt
   o.rollCur   = 0   -- current smoothed speed-roll (rad)
   o.spdSmooth = 0   -- low-passed speed, so scrub/surge doesn't jitter the effects
   o._uiKeepAlive = 0   -- timer to reassert the cockpit-hide while active
@@ -582,23 +597,35 @@ return function(...)
     local side = 0
     if c.glanceEnable then
       side = (steerCam.glanceHoldSide ~= 0) and steerCam.glanceHoldSide
-                                             or steerCam.glanceToggleSide
+          or (steerCam.glanceToggleSide ~= 0) and steerCam.glanceToggleSide
+          or steerCam.glancePreview
     end
     local desired = 0
     if side ~= 0 then
       desired = 1
-      -- side: left = +1, right = -1. The DIRECTION always follows the input (left
-      -- input looks/leans left = negative), but the magnitude comes from that
-      -- side's settings -- swapped L<->R when mirroring a right-hand-drive seat, so
-      -- e.g. the right glance keybind still looks right but uses the left settings.
-      local leftInput = side > 0
-      local useLeft = leftInput
-      if mirrored then useLeft = not useLeft end
-      local gAngle  = useLeft and (c.glanceLeft or 0)       or (c.glanceRight or 0)
-      local gOffset = useLeft and (c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
-      local dir = leftInput and -1 or 1
-      self.glanceYaw = dir * rad(gAngle)
-      self.glanceLat = dir * gOffset
+      if side == 2 then
+        -- BACK: turn ~180deg from the SAME seat position as the other glances (just a
+        -- big yaw + the back offset, no re-centring). Direction mirrors with the seat
+        -- (LHD looks back over the right shoulder = +, RHD over the left).
+        local d = mirrored and -1 or 1
+        self.glanceYaw = d * rad(180 + (c.glanceBack or 0))   -- 0 = straight back; +-90 biases the shoulder
+        self.glanceLat = d * (c.glanceOffsetBack or 0)
+        self.glanceRoll = d * (c.glanceBackRoll or 0)   -- head-tilt over the shoulder
+      else
+        -- side: left = +1, right = -1. The DIRECTION always follows the input (left
+        -- input looks/leans left = negative), but the magnitude comes from that
+        -- side's settings -- swapped L<->R when mirroring a right-hand-drive seat, so
+        -- e.g. the right glance keybind still looks right but uses the left settings.
+        local leftInput = side > 0
+        local useLeft = leftInput
+        if mirrored then useLeft = not useLeft end
+        local gAngle  = useLeft and (c.glanceLeft or 0)       or (c.glanceRight or 0)
+        local gOffset = useLeft and (c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
+        local dir = leftInput and -1 or 1
+        self.glanceYaw = dir * rad(gAngle)
+        self.glanceLat = dir * gOffset
+        self.glanceRoll = 0   -- only the back glance tilts
+      end
     end
     -- glance amount: timed tween 0<->1 over glanceTime, through the chosen curve
     if desired ~= self.glanceTargetVal then          -- (re)start on engage/release
@@ -620,8 +647,12 @@ return function(...)
     local finalYaw = self.steerYaw + (self.glanceYaw - self.steerYaw) * self.glanceAmt
     qtmp:setFromEuler(0, 0, finalYaw)
     data.res.rot:setMul2(qtmp, data.res.rot)
+    -- (the glance back head-tilt is folded into the single Final ROLL block below,
+    --  so it ADDS with the speed-roll instead of one overwriting the other)
 
-    -- lean the camera sideways along the car's world right vector (forward x up)
+    -- lean the camera sideways along the car's world right vector (forward x up).
+    -- All three glances (incl. back) start from the same seat position; this is just
+    -- the per-glance lateral offset, scaled by glanceAmt.
     local lat = self.glanceLat * self.glanceAmt
     if lat ~= 0 and data.veh ~= nil then
       gFwd:set(data.veh:getDirectionVector())
@@ -665,22 +696,24 @@ return function(...)
       rollTarget = rad(c.rollAngle or 0) * clampUnit(steerRaw) * speedFac
     end
     self.rollCur = self.rollCur + (rollTarget - self.rollCur) * clamp01(dt * 6)
-    if modsOn and c.speedRoll then
-      -- IMPORTANT: roll with OUR OWN vectors via a clean setFromDir REBUILD -- never
-      -- by composing the roll on top of the incoming orientation. Multiplying a roll
-      -- onto data.res.rot drags the stock driver cam's own cornering roll/pitch
-      -- wobble along, which reads as the camera gently swaying up/down (a long-
-      -- standing bug). So we pick a STABLE base "up" ourselves and rebuild from it:
-      -- the SAME banked + horizon-locked up the camera override uses (so the lean
-      -- rides the same horizon and keeps the car bank), or world-level when the
-      -- override is off. Then lean that base by rollCur about the look axis
-      -- (vecY = forward = the roll axis) and setFromDir. Stable like the old world-up
-      -- rebuild, but it no longer flattens the bank.
-      gFwd:set(data.res.rot * vecY)                            -- look direction (roll axis)
-      if c.camEnable and data.veh ~= nil then
-        gUp:set(data.veh:getDirectionVectorUp())              -- car/seat up: stable, banked
+
+    -- ----- Final camera ROLL (single, additive) ------------------------------
+    -- The third rotation axis. Yaw (L/R: steer + glance) and pitch (U/D: override)
+    -- are done above; ROLL is done HERE, once, so every source ADDS into one value
+    -- instead of one rebuild overwriting another: speed-roll (steering lean) +
+    -- glance back head-tilt. Base 0. We rebuild with OUR OWN transform (setFromDir)
+    -- from a STABLE up -- the car up blended by Horizon lock (= the bank), or level
+    -- if the override is off -- rolled by the total about the look axis. No stock
+    -- wobble, and the bank is recomputed fresh so it stays right even glancing 180
+    -- back. Add another roll source later by just adding it into totalRoll.
+    local totalRoll = rad((self.glanceRoll or 0) * self.glanceAmt)            -- glance head-tilt
+    if modsOn and c.speedRoll then totalRoll = totalRoll - self.rollCur end   -- speed lean
+    if data.veh ~= nil and (c.camEnable or totalRoll ~= 0) then
+      gFwd:set(data.res.rot * vecY)                            -- final look (aim + yaw)
+      if c.camEnable then
+        gUp:set(data.veh:getDirectionVectorUp())              -- bank base = car/seat up
         local sh = (c.stableHorizon or 0) / 100
-        if sh > 0 then                                        -- mirror the override's blend
+        if sh > 0 then                                        -- blend toward level by Horizon lock
           local f = 1 - sh * smootheststep(clamp01(1.42 * gUp.z))
           gUp:setScaled(f); gRight:set(vecZup); gRight:setScaled(1 - f)
           gUp:setAdd(gRight); gUp:normalize()
@@ -688,8 +721,10 @@ return function(...)
       else
         gUp:set(vecZup)                                       -- override off: level base
       end
-      gUp:set(quatFromAxisAngle(gFwd, -self.rollCur) * gUp)   -- lean the base up by rollCur
-      data.res.rot:setFromDir(gFwd, gUp)                      -- clean rebuild, our own transform
+      if totalRoll ~= 0 then
+        gUp:set(quatFromAxisAngle(gFwd, totalRoll) * gUp)     -- the single total roll, about the look axis
+      end
+      data.res.rot:setFromDir(gFwd, gUp)
     end
   end
 

@@ -87,16 +87,24 @@ Controls (editable on Custom):
                                 see a bit of steer lean while parked.
 
   Left angle         0-170 deg  blind-spot glance angle to the left (def. 115)
+  Left offset     -0.5..0.5 m   lean toward the side you glance (def. 0.10) - bump
+                                it up if the view clips into the seat; negative
+                                leans/pulls back the other way
   Right angle        0-170 deg  blind-spot glance angle to the right (def. 115)
+  Right offset    -0.5..0.5 m   same for the right glance (def. 0.10)
+  Back angle      -90..90 deg   bias the rear glance off straight-back (def. 0 =
+                                looking directly back; +-90 = more over one
+                                shoulder). Direction follows the seat side
+  Back offset     -0.5..0.5 m   lateral shift for the rear glance (def. 0)
+  Back roll        -15..15 deg  head-tilt while glancing back (def. 0; just for
+                                flavour - your head leans a touch looking back).
+                                Mirrors with the seat side
   Glance time        0-500 ms   how fast a glance snaps in/out (0 = instant)
   Glance curve                  easing curve (dropdown): Exponential (native) /
                                 Linear / S-curve / Ease1 / Ease2
-  Left offset     -0.5..0.5 m   lean toward the side you glance (def. 0.10) -
-                                bump it up if the view clips into the seat; go
-                                negative to lean/pull back the other way
-  Right offset    -0.5..0.5 m   same for the right glance (def. 0.10)
 
-Hover any category name or setting label for a short description of what it does.
+Hover any category name or setting label (marked with a small i) for a short
+description of what it does.
 
 Each category header has a twirl and a checkbox on the right: click the category
 NAME to collapse/expand it, click the CHECKBOX to turn the feature on/off.
@@ -135,13 +143,19 @@ Bind keys in Esc -> Options -> Controls -> Bindings (Camera category):
                                           (the intended everyday binding)
   SteerCam - Glance left/right (toggle)   press to latch on, press again off
                                           (handy for tuning)
+  SteerCam - Glance back (hold/toggle)    look over your shoulder to the rear.
+                                          Meant to REPLACE the native look-back:
+                                          bind it to your look-back key (and unbind
+                                          the native one) so cockpit views all run
+                                          through SteerCam and don't stack/fight.
 
 The actions ship UNBOUND - assign whatever keys you like. Glance only affects
 the view while the SteerCam camera is the active view (press C).
 
-Tuning the angles: open the panel, switch to Custom, click "Preview left" or
-"Preview right" to hold the glance, then drag the Left/Right angle slider until
-it feels right. Click the preview button again to release.
+Tuning the angles: open the panel, switch to Custom, click "Preview left/back/
+right" to hold the glance, then drag the matching angle slider until it feels
+right. Click the preview button again to release. Pressing a glance keybind also
+cancels an active preview, so you can test the real binding right away.
 
 
 ADDING PRESETS
