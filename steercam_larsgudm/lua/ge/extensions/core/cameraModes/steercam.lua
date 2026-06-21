@@ -48,7 +48,9 @@ if not steerCam then
     glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceOffsetBack = 0.0, glanceBackRoll = 0.0,
     glanceCurve = "Exponential", glanceTransition = "Fixed time",
     speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
-    speedRoll = false, rollAngle = 5.0, speedRange = 160.0,
+    speedRoll = false, rollAngle = 5.0, speedRange = 160.0, rollSource = "Steering",
+    vertInertia = false, vertInertiaMax = 8.0,
+    engineVibe = false, vibeAmount = 0.2, vibeRotAmount = 0.15,
   }
 
   -- Setting metadata: numeric ranges (clamped), booleans, and string-valued keys.
@@ -64,13 +66,14 @@ if not steerCam then
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceBack = {-90, 90}, glanceTime = {0, 500},
     glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5}, glanceOffsetBack = {-0.5, 0.5}, glanceBackRoll = {-15, 15},
     vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
+    vertInertiaMax = {0, 30}, vibeAmount = {0, 0.5}, vibeRotAmount = {0, 1},
   }
   local bools  = {
     speedFade = true, vertigo = true, speedRoll = true,
     camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
-    reverseSteer = true,
+    reverseSteer = true, vertInertia = true, engineVibe = true,
   }
-  local strs = { glanceCurve = true, glanceTransition = true }   -- string-valued settings
+  local strs = { glanceCurve = true, glanceTransition = true, rollSource = true }   -- string-valued settings
 
   -- Build a clean cfg from a decoded preset file: start from Default, then copy
   -- over any KNOWN key (correct type; numbers clamped to range). Unknown keys are
@@ -177,7 +180,20 @@ if not steerCam then
     speedRoll  = getBool("steerCam_custom_speedRoll",  steerCam.defaults.speedRoll),
     rollAngle  = getNum("steerCam_custom_rollAngle",   steerCam.defaults.rollAngle),
     speedRange = getNum("steerCam_custom_speedRange",  steerCam.defaults.speedRange),
+    rollSource = getStr("steerCam_custom_rollSource",  steerCam.defaults.rollSource),
+    vertInertia = getBool("steerCam_custom_vertInertia", steerCam.defaults.vertInertia),
+    vertInertiaMax = getNum("steerCam_custom_vertInertiaMax", steerCam.defaults.vertInertiaMax),
+    engineVibe = getBool("steerCam_custom_engineVibe", steerCam.defaults.engineVibe),
+    vibeAmount = getNum("steerCam_custom_vibeAmount", steerCam.defaults.vibeAmount),
+    vibeRotAmount = getNum("steerCam_custom_vibeRotAmount", steerCam.defaults.vibeRotAmount),
   }
+  -- Clamp saved Custom numbers into their current range, so a value persisted under
+  -- an older, wider range (e.g. before a max was lowered) loads sane instead of out
+  -- of bounds. Bools/strings are untouched.
+  for k, v in pairs(steerCam.custom) do
+    local r = ranges[k]
+    if r and type(v) == "number" then steerCam.custom[k] = clampv(v, r[1], r[2]) end
+  end
 
   -- steerCam.cfg points at whichever profile is active (the camera reads this).
   local function resolveCfg(name)
@@ -259,6 +275,8 @@ if not steerCam then
       speedModEnable = a.speedModEnable,
       vertigo = a.vertigo, vertigoFov = a.vertigoFov, vertigoDolly = a.vertigoDolly,
       speedRoll = a.speedRoll, rollAngle = a.rollAngle, speedRange = a.speedRange,
+      rollSource = a.rollSource, vertInertia = a.vertInertia, vertInertiaMax = a.vertInertiaMax,
+      engineVibe = a.engineVibe, vibeAmount = a.vibeAmount, vibeRotAmount = a.vibeRotAmount,
     }
   end
 
@@ -360,8 +378,22 @@ local gFwd, gUp, gRight = vec3(), vec3(), vec3()  -- scratch for the glance lean
 local vecY = vec3(0, 1, 0)                         -- camera-local forward axis
 local vecZup = vec3(0, 0, 1)                       -- world up axis
 local rad = math.rad
+local sin = math.sin
 local function clamp01(x) return x < 0 and 0 or (x > 1 and 1 or x) end
 local function clampUnit(x) return x < -1 and -1 or (x > 1 and 1 or x) end
+
+-- Engine-vibration noise: three decorrelated -1..1 values from a phase `t` (seconds),
+-- two sines per axis at different rates so the shake is lively, non-repeating and
+-- frame-rate independent. Shared by the positional buzz and the rotational wobble
+-- (call with a phase offset to decorrelate the two). VIBE_FREQ is the one knob for
+-- the overall pitch of the buzz -- lower = slower/coarser; tune it here, no slider.
+local VIBE_FREQ = 7.0
+local function vibeNoise(t)
+  t = t * VIBE_FREQ
+  return 0.6 * sin(t * 1.10) + 0.4 * sin(t * 1.60),
+         0.6 * sin(t * 1.30) + 0.4 * sin(t * 1.50),
+         0.6 * sin(t * 1.20) + 0.4 * sin(t * 1.40)
+end
 
 -- Easing curves: map a 0..1 progress to a 0..1 eased value (glance + reverse).
 local exp = math.exp
@@ -459,6 +491,12 @@ return function(...)
   o.poseFromYaw = 0; o.poseFromLat = 0; o.poseFromRoll = 0  -- snapshot at tween start
   o.rollCur   = 0   -- current smoothed speed-roll (rad)
   o.spdSmooth = 0   -- low-passed speed, so scrub/surge doesn't jitter the effects
+  -- Inertia (g-force) feel: velocity is differentiated each frame into the felt
+  -- lateral push (inertia head-roll) and vertical push (head-lift), low-passed.
+  o.prevVel = vec3(); o.velInit = false   -- last velocity + first-frame guard
+  o.latAccLP = 0; o.vertAccLP = 0         -- low-passed lateral / vertical accel (m/s^2)
+  o.vertOff = 0                           -- current head-lift offset (m, + = up off seat)
+  o.vibePhase = 0; o.vibeEnv = 0          -- engine-vibration time accumulator + envelope
   o._uiKeepAlive = 0   -- timer to reassert the cockpit-hide while active
   o._rhd = nil   -- last-logged right-hand-drive flag (debug log throttle only)
 
@@ -712,14 +750,35 @@ return function(...)
       data.res.pos:setAdd(gRight)
     end
 
-    -- ----- Speed modifiers: speed-driven FOV vertigo + corner roll -----------
-    -- Both ramp to full strength as speed approaches speedRange (shared ceiling).
+    -- ----- Immersive extras: FOV vertigo + corner roll + head inertia --------
+    -- Vertigo and steering-roll ramp to full strength as speed approaches speedRange
+    -- (shared ceiling); the inertia effects below use g-force instead of speedRange.
     -- Speed is low-passed so tyre scrub/surge can't jitter the roll or FOV.
     local spdRaw = (data.vel and data.vel:length()) or 0
     self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * clamp01(dt * 3)
     local sr = (c.speedRange or 160) / 3.6            -- km/h -> m/s ceiling
     local speedFac = clamp01(self.spdSmooth / (sr > 0.1 and sr or 0.1))
     local modsOn = c.speedModEnable
+
+    -- Inertia g-force: differentiate the car velocity into the felt LATERAL push
+    -- (inertia head-roll) and VERTICAL push (head-lift), low-passed so road buzz
+    -- doesn't jitter them. Tracked every frame (regardless of which effects are on)
+    -- so enabling one mid-drive starts clean. GFULL = the 1 g full-strength ref.
+    local GFULL = 9.81
+    local latAcc, vertAcc = 0, 0
+    if data.veh ~= nil and data.vel ~= nil then
+      gFwd:set(data.veh:getDirectionVector())
+      gUp:set(data.veh:getDirectionVectorUp())
+      gRight:setCross(gFwd, gUp); gRight:normalize()    -- car right (world)
+      if self.velInit then
+        latAcc  = (data.vel:dot(gRight) - self.prevVel:dot(gRight)) / dt   -- + = pushed right
+        vertAcc = (data.vel.z - self.prevVel.z) / dt                       -- + = pushed up
+      end
+      self.prevVel:set(data.vel)
+      self.velInit = true
+    end
+    self.latAccLP  = self.latAccLP  + (latAcc  - self.latAccLP)  * clamp01(dt * 6)
+    self.vertAccLP = self.vertAccLP + (vertAcc - self.vertAccLP) * clamp01(dt * 6)
 
     if modsOn and c.vertigo and data.res.fov then
       local f0 = data.res.fov
@@ -738,13 +797,60 @@ return function(...)
       end
     end
 
-    -- roll amount = (min(speed, speedRange) / speedRange) * steering * rollAngle
-    -- steering: +1 = right, 0 = neutral, -1 = left.
+    -- corner roll: lean the head into the turn, up to rollAngle. "Steering" scales
+    -- the steering input by speed (+1 = right, -1 = left). "Inertia" instead leans to
+    -- the real lateral g-force -- already speed-aware via v^2/r, so it responds to
+    -- actual cornering load (and to slides/kerbs), closer to how a real head behaves.
+    -- Both keep the same sign, so rollAngle means the same thing either way.
     local rollTarget = 0
     if modsOn and c.speedRoll then
-      rollTarget = rad(c.rollAngle or 0) * clampUnit(steerRaw) * speedFac
+      local rollInput
+      if (c.rollSource or "Steering") == "Inertia" then
+        rollInput = clampUnit(self.latAccLP / GFULL)      -- full lean at ~1 g lateral
+      else
+        rollInput = clampUnit(steerRaw) * speedFac
+      end
+      rollTarget = rad(c.rollAngle or 0) * rollInput
     end
     self.rollCur = self.rollCur + (rollTarget - self.rollCur) * clamp01(dt * 6)
+
+    -- vertical head inertia ("head lift"): the body lags the car's vertical motion --
+    -- floating UP off the seat when the car drops away (cresting a rise, going light
+    -- or airborne) and pressing DOWN under compression (landings, dips). Map the felt
+    -- vertical g to an offset clamped to vertInertiaMax (cm -> m), then spring it so it
+    -- moves like a head on a neck. Applied along the car's up axis, on top of camUp.
+    local vTarget = 0
+    if modsOn and c.vertInertia then
+      vTarget = clampUnit(-self.vertAccLP / GFULL) * ((c.vertInertiaMax or 0) * 0.01)
+    end
+    self.vertOff = self.vertOff + (vTarget - self.vertOff) * clamp01(dt * 9)
+    if self.vertOff ~= 0 and data.veh ~= nil then
+      gUp:set(data.veh:getDirectionVectorUp())
+      gUp:setScaled(self.vertOff)
+      data.res.pos:setAdd(gUp)
+    end
+
+    -- engine vibration: a small, rapid positional buzz. steerCamVibe is the fed STATE
+    -- per vehicle (1 = engine starting, 2 = engine stopping); the amplitude SCALE lives
+    -- HERE next to the slider -- the start is full vibeAmount, the shut-down a quarter
+    -- of it (gentler) -- and the envelope fades it in/out sharply. Two sines per axis at
+    -- different rates give a lively, non-repeating, frame-rate-independent shake; sub-cm,
+    -- so it reads as vibration without being nauseating.
+    local vibeState = 0
+    if modsOn and c.engineVibe and steerCamVibe ~= nil and data.veh ~= nil then
+      local vid = data.veh.getID and data.veh:getID() or nil
+      if vid ~= nil then vibeState = steerCamVibe[vid] or 0 end
+    end
+    local vibeTarget = (vibeState == 1) and 1 or (vibeState == 2 and 0.25 or 0)   -- start full, stop a quarter
+    self.vibeEnv = self.vibeEnv + (vibeTarget - self.vibeEnv) * clamp01(dt * 14)
+    if self.vibeEnv > 0.001 and data.veh ~= nil then
+      self.vibePhase = self.vibePhase + dt
+      local t = self.vibePhase * 6.2831853       -- seconds -> radians
+      local amp = (c.vibeAmount or 0) * 0.01 * self.vibeEnv     -- cm -> m, enveloped
+      local nx, ny, nz = vibeNoise(t)
+      gFwd.x = amp * nx; gFwd.y = amp * ny; gFwd.z = amp * nz
+      data.res.pos:setAdd(gFwd)
+    end
 
     -- ----- Final camera ROLL (single, additive) ------------------------------
     -- The third rotation axis. Yaw (L/R: steer + glance) and pitch (U/D: override)
@@ -774,6 +880,16 @@ return function(...)
         gUp:set(quatFromAxisAngle(gFwd, totalRoll) * gUp)     -- the single total roll, about the look axis
       end
       data.res.rot:setFromDir(gFwd, gUp)
+    end
+
+    -- rotation vibration: the same engine buzz as a tiny orientation wobble on top of
+    -- everything (mega subtle, up to vibeRotAmount deg per axis). Phase-shifted noise so
+    -- it isn't locked to the positional shake. Applied last, so nothing overwrites it.
+    if self.vibeEnv > 0.001 and modsOn and c.engineVibe and (c.vibeRotAmount or 0) > 0 then
+      local rx, ry, rz = vibeNoise(self.vibePhase * 6.2831853 + 137.0)
+      local ra = rad(c.vibeRotAmount or 0) * self.vibeEnv      -- deg -> rad, enveloped
+      qtmp:setFromEuler(rx * ra, ry * ra, rz * ra)
+      data.res.rot:setMul2(qtmp, data.res.rot)
     end
   end
 

@@ -108,12 +108,13 @@ description of what it does.
 
 Each category header has a twirl and a checkbox on the right: click the category
 NAME to collapse/expand it, click the CHECKBOX to turn the feature on/off.
-Disabling a category auto-collapses it; re-enabling leaves it collapsed (click
-the name to open it). Unticking a category turns that whole feature off (the
-glance keybinds keep existing, they just do nothing while it's off).
+Disabling a category dims it but leaves it open, so you can still see and tweak
+its settings; use the twirl on the name to collapse/expand. Unticking a category
+turns that whole feature off (the glance keybinds keep existing, they just do
+nothing while it's off).
 
-Speed modifiers (mostly for fun, scale with speed; SteerCam view only):
-  Speed modifiers               master enable for this section (off by default)
+Immersive extras (optional cabin-feel effects; SteerCam view only):
+  Immersive extras              master enable for this section (off by default)
   Speed vertigo (FOV)           widen the FOV as you go faster, with a matching
                                 forward dolly (the dolly-zoom "vertigo" warp)
   FOV change         0-40 deg   max extra FOV reached at the speed range
@@ -121,13 +122,27 @@ Speed modifiers (mostly for fun, scale with speed; SteerCam view only):
                                 (def. 0.30): 0 = FOV only (no camera move);
                                 higher pins more distant things but moves the
                                 camera forward more
-  Speed camera roll             lean into the turn from steering input; hidden
-                                at low speed, grows as you near the speed range.
-                                Leans the camera-override horizon (keeps the bank,
-                                doesn't flatten it or add up/down sway)
-  Roll change        0-20 deg   max lean angle (full steering at the speed range)
-  Speed range        20-400     km/h at which BOTH effects reach full strength
-                                (def. 160; shared ceiling)
+  Speed camera roll             lean the head into the turn; leans the camera-
+                                override horizon (keeps the bank, doesn't flatten
+                                it or add up/down sway)
+  Roll change        0-20 deg   max lean angle
+  Roll source                   what drives the lean: Steering input (scaled by
+                                speed) or Inertia (real lateral g-force, full lean
+                                at ~1g, so it follows actual cornering load/slides)
+  Speed range        20-400     km/h at which the speed-scaled effects reach full
+                                strength (def. 160; shared by vertigo + steering
+                                roll. Inertia roll uses g-force instead)
+  Head lift (vert. inertia)     the driver lifts off the seat when the car drops
+                                away (cresting, going light, airborne) and sinks
+                                under compression -- a vertical offset added on top
+                                of the camera Up offset
+  Max lift           0-30 cm    how far the head travels at most (full at ~1g)
+  Engine vibration              a small rapid camera buzz as the engine fires up (just
+                                after a brief ignition delay), plus a gentler quarter-
+                                strength shudder when you switch it off (road texture
+                                is mostly suspension-damped, so not shaken)
+  Vibration amount   0-0.5 cm   how far the buzz moves the camera at its peak
+  Rotation amount    0-1 deg    how much the buzz also rotates the view (keep it tiny)
 
 Changes apply instantly and persist between drives. You can keep the panel open
 while driving to dial in the feel, then remove it.

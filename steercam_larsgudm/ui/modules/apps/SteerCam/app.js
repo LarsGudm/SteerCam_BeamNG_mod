@@ -179,7 +179,7 @@ angular.module('beamng.apps')
             '</div></div>',
         '</div>',
 
-        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.speedModEnable}" ng-click="toggleCollapse(\'speed\')"><span class="sc-tw" ng-class="{open:!collapsed.speed}">▸</span>Speed modifiers<span class="sc-tipsrc" ng-if="tips.speed">{{tips.speed}}</span><span class="sc-info" ng-if="tips.speed">&#9432;</span></span><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="setEnable(\'speed\',\'speedModEnable\',cfg.speedModEnable)" ng-disabled="locked"></div></div>',
+        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.speedModEnable}" ng-click="toggleCollapse(\'speed\')"><span class="sc-tw" ng-class="{open:!collapsed.speed}">▸</span>Immersive extras<span class="sc-tipsrc" ng-if="tips.speed">{{tips.speed}}</span><span class="sc-info" ng-if="tips.speed">&#9432;</span></span><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="setEnable(\'speed\',\'speedModEnable\',cfg.speedModEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.speed" ng-class="{\'sc-off\':!cfg.speedModEnable}">',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.vertigo" ng-change="set(\'vertigo\', cfg.vertigo)" ng-disabled="locked"> Speed vertigo (FOV)<span class="sc-tipsrc" ng-if="tips.vertigo">{{tips.vertigo}}</span><span class="sc-info" ng-if="tips.vertigo">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>FOV change<span class="sc-tipsrc" ng-if="tips.vertigoFov">{{tips.vertigoFov}}</span><span class="sc-info" ng-if="tips.vertigoFov">&#9432;</span></span>',
@@ -192,9 +192,27 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll change<span class="sc-tipsrc" ng-if="tips.rollAngle">{{tips.rollAngle}}</span><span class="sc-info" ng-if="tips.rollAngle">&#9432;</span></span>',
             '<input type="range" min="0" max="20" step="0.5" ng-model="cfg.rollAngle" ng-change="set(\'rollAngle\', cfg.rollAngle)" ng-disabled="locked || !cfg.speedRoll">',
             '<b>{{cfg.rollAngle}}°</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll source<span class="sc-tipsrc" ng-if="tips.rollSource">{{tips.rollSource}}</span><span class="sc-info" ng-if="tips.rollSource">&#9432;</span></span>',
+            '<div class="sc-dd">',
+              '<button class="sc-dd-head" ng-click="toggleDD(\'rollSource\')" ng-disabled="locked || !cfg.speedRoll">{{rollSourceLabel(cfg.rollSource)}}<span class="sc-dd-arr">▾</span></button>',
+              '<div class="sc-dd-list" ng-show="openDD===\'rollSource\'">',
+                '<div class="sc-dd-opt" ng-repeat="o in rollSourceOptions" ng-class="{active: cfg.rollSource===o.k}" ng-click="setRollSource(o.k); openDD=null">{{o.l}}</div>',
+              '</div>',
+            '</div></div>',
           '<div class="sc-row"><span>Speed range<span class="sc-tipsrc" ng-if="tips.speedRange">{{tips.speedRange}}</span><span class="sc-info" ng-if="tips.speedRange">&#9432;</span></span>',
             '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedRange" ng-change="set(\'speedRange\', cfg.speedRange)" ng-disabled="locked">',
             '<b style="flex:0 0 64px">{{cfg.speedRange}} km/h</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.vertInertia" ng-change="set(\'vertInertia\', cfg.vertInertia)" ng-disabled="locked"> Head lift (vertical inertia)<span class="sc-tipsrc" ng-if="tips.vertInertia">{{tips.vertInertia}}</span><span class="sc-info" ng-if="tips.vertInertia">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertInertia}"><span>Max lift<span class="sc-tipsrc" ng-if="tips.vertInertiaMax">{{tips.vertInertiaMax}}</span><span class="sc-info" ng-if="tips.vertInertiaMax">&#9432;</span></span>',
+            '<input type="range" min="0" max="30" step="0.5" ng-model="cfg.vertInertiaMax" ng-change="set(\'vertInertiaMax\', cfg.vertInertiaMax)" ng-disabled="locked || !cfg.vertInertia">',
+            '<b>{{cfg.vertInertiaMax}}cm</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.engineVibe" ng-change="set(\'engineVibe\', cfg.engineVibe)" ng-disabled="locked"> Engine vibration<span class="sc-tipsrc" ng-if="tips.engineVibe">{{tips.engineVibe}}</span><span class="sc-info" ng-if="tips.engineVibe">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Vibration amount<span class="sc-tipsrc" ng-if="tips.vibeAmount">{{tips.vibeAmount}}</span><span class="sc-info" ng-if="tips.vibeAmount">&#9432;</span></span>',
+            '<input type="range" min="0" max="0.5" step="0.01" ng-model="cfg.vibeAmount" ng-change="set(\'vibeAmount\', cfg.vibeAmount)" ng-disabled="locked || !cfg.engineVibe">',
+            '<b>{{cfg.vibeAmount}}cm</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Rotation amount<span class="sc-tipsrc" ng-if="tips.vibeRotAmount">{{tips.vibeRotAmount}}</span><span class="sc-info" ng-if="tips.vibeRotAmount">&#9432;</span></span>',
+            '<input type="range" min="0" max="1" step="0.01" ng-model="cfg.vibeRotAmount" ng-change="set(\'vibeRotAmount\', cfg.vibeRotAmount)" ng-disabled="locked || !cfg.engineVibe">',
+            '<b>{{cfg.vibeRotAmount}}°</b></div>',
         '</div>',
 
         '<div class="sc-hint" ng-show="locked">Default is locked. Switch to Custom to edit.</div>',
@@ -219,7 +237,7 @@ angular.module('beamng.apps')
         cam: '',
         steer: 'Turns the view camera view based on steering input',
         glance: 'Snap the view to different angles. Bind keys in Options > Controls > Camera',
-        speed: 'Optional immersive, speed-driven effects: FOV vertigo and steering-based camera roll. Off by default.',
+        speed: 'Optional immersive effects: FOV vertigo, corner head-roll, and vertical head inertia. Off by default.',
         camFwd: '',
         camUp: '',
         camYaw: '',
@@ -245,13 +263,19 @@ angular.module('beamng.apps')
         vertigo: 'Widen the FOV as you speed up, with a matching forward dolly (the vertigo warp).',
         vertigoFov: 'Max extra FOV added by the time you reach the speed range.',
         vertigoDolly: 'Distance kept "pinned" by the counter-dolly. 0 = FOV only, no camera move.',
-        speedRoll: 'Lean into corners from steering, growing with speed.',
-        rollAngle: 'Max lean angle (at full steering and the speed range).',
-        speedRange: 'Speed at which the speed effects reach full strength.'
+        speedRoll: 'Lean the head into corners. Source is set below; max lean is Roll change.',
+        rollSource: 'What drives the corner lean. Steering = from steering input, scaled by speed. Inertia = from real lateral g-force (full lean at ~1g), so it follows actual cornering load and slides.',
+        rollAngle: 'Max lean angle (at full steering / speed range, or ~1g of cornering in Inertia mode).',
+        speedRange: 'Speed at which the speed effects reach full strength.',
+        vertInertia: 'Driver lifts off the seat when the car drops away (cresting, going light, airborne) and sinks under compression. A vertical offset on top of the camera Up offset.',
+        vertInertiaMax: 'How far the head can travel at most (full at ~1g of vertical g-force).',
+        engineVibe: 'A small rapid camera shake as the engine fires up (just after a brief ignition delay), plus a gentler quarter-strength shudder when you switch it off. (Road texture is mostly absorbed by the suspension, so it is not simulated.)',
+        vibeAmount: 'How far the shake moves the camera at its peak. Small on purpose, so it reads as a buzz without being nauseating.',
+        vibeRotAmount: 'How much the shake also rotates the view at its peak. Keep it tiny - a fraction of a degree feels best.'
       };
-      // per-section twirl state; refreshed from each profile's enable flags on load
-      scope.collapsed = { cam: false, steer: false, glance: false, speed: true };
-      scope.openDD = null;   // which custom dropdown is open ('preset' | 'curve' | 'transition' | null)
+      // per-section twirl state; every section starts open (none collapsed)
+      scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
+      scope.openDD = null;   // open custom dropdown ('preset'|'curve'|'transition'|'rollSource'|null)
       scope.curveOptions = [
         { k: 'Exponential', l: 'Exponential (native)' },
         { k: 'Linear', l: 'Linear' },
@@ -275,6 +299,18 @@ angular.module('beamng.apps')
       scope.transitionLabel = function (k) {
         for (var i = 0; i < scope.transitionOptions.length; i++) {
           if (scope.transitionOptions[i].k === k) { return scope.transitionOptions[i].l; }
+        }
+        return k;
+      };
+      // what drives the corner head-roll (see steercam.lua): steering input vs the
+      // real lateral g-force ("inertia"), which follows actual cornering load.
+      scope.rollSourceOptions = [
+        { k: 'Steering', l: 'Steering input' },
+        { k: 'Inertia', l: 'Inertia (g-force)' }
+      ];
+      scope.rollSourceLabel = function (k) {
+        for (var i = 0; i < scope.rollSourceOptions.length; i++) {
+          if (scope.rollSourceOptions[i].k === k) { return scope.rollSourceOptions[i].l; }
         }
         return k;
       };
@@ -306,7 +342,9 @@ angular.module('beamng.apps')
         glanceLeft: 115, glanceRight: 115, glanceBack: 0, glanceTime: 120, glanceCurve: 'Exponential', glanceTransition: 'Fixed time',
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10, glanceOffsetBack: 0, glanceBackRoll: 0,
         speedModEnable: true,
-        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160
+        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160,
+        rollSource: 'Steering', vertInertia: false, vertInertiaMax: 8,
+        engineVibe: false, vibeAmount: 0.2, vibeRotAmount: 0.15
       };
 
       function pushOne(key, val) {
@@ -363,10 +401,9 @@ angular.module('beamng.apps')
               scope.locked = (scope.preset !== 'Custom');
               if (typeof cfg.modEnabled === 'boolean') { scope.modEnabled = cfg.modEnabled; }
               if (typeof cfg.mirrorSeat === 'boolean') { scope.mirrorSeat = cfg.mirrorSeat; }
-              // collapse state is independent of enable state; keep the defaults
-              // (Speed modifiers collapsed, the rest open) so toggling a section
-              // off never hides its settings.
-              scope.collapsed = { cam: false, steer: false, glance: false, speed: true };
+              // collapse state is independent of enable state; every section starts
+              // open so toggling a section off never hides its settings.
+              scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
             });
           }
         });
@@ -408,6 +445,13 @@ angular.module('beamng.apps')
         if (scope.locked) { return; }
         scope.cfg.glanceTransition = name;
         pushOne('glanceTransition', name);
+      };
+
+      // pick what drives the corner head-roll (Steering / Inertia)
+      scope.setRollSource = function (name) {
+        if (scope.locked) { return; }
+        scope.cfg.rollSource = name;
+        pushOne('rollSource', name);
       };
 
       // close an open custom dropdown when clicking/tapping anywhere outside it

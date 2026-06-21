@@ -39,5 +39,11 @@
   "vertigoDolly": 0.30,
   "speedRoll": true,
   "rollAngle": 5.0,
-  "speedRange": 160.0
+  "speedRange": 160.0,
+  "rollSource": "Steering",
+  "vertInertia": false,
+  "vertInertiaMax": 8.0,
+  "engineVibe": false,
+  "vibeAmount": 0.2,
+  "vibeRotAmount": 0.15
 }
