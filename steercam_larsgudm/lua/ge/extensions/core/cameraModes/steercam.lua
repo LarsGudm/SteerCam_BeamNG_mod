@@ -271,8 +271,13 @@ if not steerCam then
   -- ----- Blind-spot glance runtime ------------------------------------------
   -- Side convention: left = +1, right = -1, back = 2 (0 = none). Left/right match
   -- steer-left = positive yaw; back is ~180deg with the camera re-centred.
-  steerCam.glanceHoldSide   = 0   -- held key
-  steerCam.glanceToggleSide = 0   -- latched side from the TOGGLE keybind
+  -- Hold keybinds form an ORDERED STACK so simultaneous holds resolve to the most
+  -- recently pressed one, and releasing it falls back to whatever is STILL held
+  -- (hold left, drop a back-glance on top, release it -> back to left). Toggle and
+  -- preview stay single latches (last input wins), resolved as a fallback below.
+  steerCam.glanceHeld    = {}     -- set: sideNum -> true while that hold key is down
+  steerCam.glanceStack   = {}     -- ordered held sides, most-recently-pressed last
+  steerCam.glanceToggleSide = 0   -- latched side from the TOGGLE keybind (last wins)
   steerCam.glancePreview    = 0   -- latched side from the UI Preview buttons -- kept
                                   -- separate so using ANY keybind cancels the preview
 
@@ -284,16 +289,38 @@ if not steerCam then
   end
   local function truthy(v) return v == true or v == 1 or v == "true" end
 
-  -- hold bindings: glance while the key is down, return on release. Using a keybind
-  -- cancels any UI Preview latch so you can immediately test the real binding.
+  -- remove every occurrence of a side from the hold stack (release / de-dupe)
+  local function stackRemove(s)
+    local st = steerCam.glanceStack
+    for i = #st, 1, -1 do if st[i] == s then table.remove(st, i) end end
+  end
+
+  -- hold bindings: glance while the key is down, return on release. Multiple holds
+  -- STACK -- the most recently pressed still-held side is the active glance, so you
+  -- can hold left, drop a back-glance on top, then release it to fall back to left.
+  -- Using a keybind cancels any UI Preview latch so you can test the real binding.
   function steerCam.glanceHold(side, down)
     local s = sideNum(side); if s == 0 then return end
     if truthy(down) then
       steerCam.glancePreview = 0
-      steerCam.glanceHoldSide = s
-    elseif steerCam.glanceHoldSide == s then
-      steerCam.glanceHoldSide = 0
+      if not steerCam.glanceHeld[s] then                     -- ignore key-repeat re-downs
+        steerCam.glanceHeld[s] = true
+        stackRemove(s)
+        steerCam.glanceStack[#steerCam.glanceStack + 1] = s  -- push as most-recent
+      end
+    else
+      steerCam.glanceHeld[s] = nil
+      stackRemove(s)
     end
+  end
+
+  -- resolve the active glance side: the top of the hold stack wins (last pressed),
+  -- then the toggle latch, then the UI preview, else 0 (front / steer-follow).
+  function steerCam.glanceTarget()
+    local st = steerCam.glanceStack
+    if #st > 0 then return st[#st] end
+    if steerCam.glanceToggleSide ~= 0 then return steerCam.glanceToggleSide end
+    return steerCam.glancePreview
   end
 
   -- toggle bindings: flip the latched glance for a side (also cancels the preview)
@@ -318,7 +345,9 @@ if not steerCam then
   -- UI: read latched/held state so the app can highlight the active side. `preview`
   -- drives the Preview buttons and drops to 0 the moment a keybind is used.
   function steerCam.getGlanceState()
-    return { hold = steerCam.glanceHoldSide, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview }
+    local st = steerCam.glanceStack
+    local hold = (#st > 0) and st[#st] or 0   -- top of the stack = the live held side
+    return { hold = hold, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview }
   end
 end
 
@@ -417,11 +446,15 @@ return function(...)
   o.steerYaw  = 0
   o.reverseBlend = 0   -- 0 = forward turn, 1 = mirrored (reverse) turn
   o.reverseFrom = 0; o.reverseProg = 1; o.reverseTargetVal = 0   -- reverse tween state
-  o.glanceAmt = 0   -- 0..1 how far the glance overrides steer-follow
-  o.glanceFrom = 0; o.glanceProg = 1; o.glanceTargetVal = 0      -- glance tween state
-  o.glanceYaw = 0   -- target yaw of the active glance (rad)
-  o.glanceLat = 0   -- target lateral lean of the active glance (m, + = car right)
-  o.glanceRoll = 0  -- target roll (deg) of the active glance -- back glance head-tilt
+  -- Glance pose blend: the camera interpolates a (yaw, lateral, roll) pose between
+  -- the FRONT target (the steer-follow aim) and the three glance targets. When the
+  -- active target changes we snapshot the current pose as the tween's source, so the
+  -- motion always continues from wherever the camera is -- no snapping on rapid
+  -- side-swaps or when changing your mind mid-transition.
+  o.glanceSide = 0   -- active target side (0 front, 1 left, -1 right, 2 back)
+  o.glanceProg = 1   -- 0..1 tween progress from the snapshot toward the target
+  o.poseYaw = 0; o.poseLat = 0; o.poseRoll = 0              -- current interpolated pose
+  o.poseFromYaw = 0; o.poseFromLat = 0; o.poseFromRoll = 0  -- snapshot at tween start
   o.rollCur   = 0   -- current smoothed speed-roll (rad)
   o.spdSmooth = 0   -- low-passed speed, so scrub/surge doesn't jitter the effects
   o._uiKeepAlive = 0   -- timer to reassert the cockpit-hide while active
@@ -591,60 +624,61 @@ return function(...)
     end
     self.steerYaw = self.steerYaw + (yawTarget - self.steerYaw) * clamp01(dt * c.stiffness)
 
-    -- Blind-spot glance: overrides steer-follow while a side is engaged, then
-    -- blends back. A held key wins over a latched toggle / UI preview. When the
-    -- category is disabled the keybinds still fire (harmless) but are ignored.
-    local side = 0
-    if c.glanceEnable then
-      side = (steerCam.glanceHoldSide ~= 0) and steerCam.glanceHoldSide
-          or (steerCam.glanceToggleSide ~= 0) and steerCam.glanceToggleSide
-          or steerCam.glancePreview
+    -- Blind-spot glance: the camera blends a (yaw, lateral, roll) pose between the
+    -- FRONT target (the steer-follow aim) and the three glance targets. The active
+    -- target is resolved in steerCam.glanceTarget() -- the last still-held HOLD key,
+    -- else the toggle latch, else the UI preview. When that target changes we
+    -- snapshot the CURRENT pose and tween from there to the new one over glanceTime,
+    -- so rapid side-swaps (and changing your mind mid-transition) flow continuously
+    -- from wherever the camera is, instead of snapping. Category disabled -> front.
+    local targetSide = c.glanceEnable and steerCam.glanceTarget() or 0
+    local tgtYaw, tgtLat, tgtRoll
+    if targetSide == 0 then
+      tgtYaw, tgtLat, tgtRoll = self.steerYaw, 0, 0          -- front = steer-follow aim
+    elseif targetSide == 2 then
+      -- BACK: turn ~180deg from the SAME seat position as the other glances (just a
+      -- big yaw + the back offset, no re-centring). Direction mirrors with the seat
+      -- (LHD looks back over the right shoulder = +, RHD over the left).
+      local d = mirrored and -1 or 1
+      tgtYaw  = d * rad(180 + (c.glanceBack or 0))   -- 0 = straight back; +-90 biases the shoulder
+      tgtLat  = d * (c.glanceOffsetBack or 0)
+      tgtRoll = d * (c.glanceBackRoll or 0)          -- head-tilt over the shoulder
+    else
+      -- side: left = +1, right = -1. The DIRECTION always follows the input (left
+      -- input looks/leans left = negative), but the magnitude comes from that side's
+      -- settings -- swapped L<->R when mirroring a right-hand-drive seat, so e.g. the
+      -- right glance keybind still looks right but uses the left settings.
+      local leftInput = targetSide > 0
+      local useLeft = leftInput
+      if mirrored then useLeft = not useLeft end
+      local gAngle  = useLeft and (c.glanceLeft or 0)       or (c.glanceRight or 0)
+      local gOffset = useLeft and (c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
+      local dir = leftInput and -1 or 1
+      tgtYaw, tgtLat, tgtRoll = dir * rad(gAngle), dir * gOffset, 0   -- only back tilts
     end
-    local desired = 0
-    if side ~= 0 then
-      desired = 1
-      if side == 2 then
-        -- BACK: turn ~180deg from the SAME seat position as the other glances (just a
-        -- big yaw + the back offset, no re-centring). Direction mirrors with the seat
-        -- (LHD looks back over the right shoulder = +, RHD over the left).
-        local d = mirrored and -1 or 1
-        self.glanceYaw = d * rad(180 + (c.glanceBack or 0))   -- 0 = straight back; +-90 biases the shoulder
-        self.glanceLat = d * (c.glanceOffsetBack or 0)
-        self.glanceRoll = d * (c.glanceBackRoll or 0)   -- head-tilt over the shoulder
-      else
-        -- side: left = +1, right = -1. The DIRECTION always follows the input (left
-        -- input looks/leans left = negative), but the magnitude comes from that
-        -- side's settings -- swapped L<->R when mirroring a right-hand-drive seat, so
-        -- e.g. the right glance keybind still looks right but uses the left settings.
-        local leftInput = side > 0
-        local useLeft = leftInput
-        if mirrored then useLeft = not useLeft end
-        local gAngle  = useLeft and (c.glanceLeft or 0)       or (c.glanceRight or 0)
-        local gOffset = useLeft and (c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
-        local dir = leftInput and -1 or 1
-        self.glanceYaw = dir * rad(gAngle)
-        self.glanceLat = dir * gOffset
-        self.glanceRoll = 0   -- only the back glance tilts
-      end
-    end
-    -- glance amount: timed tween 0<->1 over glanceTime, through the chosen curve
-    if desired ~= self.glanceTargetVal then          -- (re)start on engage/release
-      self.glanceFrom = self.glanceAmt
-      self.glanceTargetVal = desired
+
+    -- (re)start the tween whenever the active target changes: freeze the current
+    -- pose as the source so the new motion continues from where it is right now.
+    if targetSide ~= self.glanceSide then
+      self.poseFromYaw, self.poseFromLat, self.poseFromRoll = self.poseYaw, self.poseLat, self.poseRoll
+      self.glanceSide = targetSide
       self.glanceProg = 0
     end
     local gt = c.glanceTime or 100
     if gt <= 5 then
       self.glanceProg = 1
-      self.glanceAmt = self.glanceTargetVal
+      self.poseYaw, self.poseLat, self.poseRoll = tgtYaw, tgtLat, tgtRoll
     else
       self.glanceProg = clamp01(self.glanceProg + dt * 1000 / gt)
-      local cf = easeCurves[c.glanceCurve] or easeExp
-      self.glanceAmt = self.glanceFrom + (self.glanceTargetVal - self.glanceFrom) * cf(self.glanceProg)
+      local e = (easeCurves[c.glanceCurve] or easeExp)(self.glanceProg)
+      self.poseYaw  = self.poseFromYaw  + (tgtYaw  - self.poseFromYaw)  * e
+      self.poseLat  = self.poseFromLat  + (tgtLat  - self.poseFromLat)  * e
+      self.poseRoll = self.poseFromRoll + (tgtRoll - self.poseFromRoll) * e
     end
 
-    -- glanceAmt=1 → pure glance (override); glanceAmt=0 → pure steer-follow
-    local finalYaw = self.steerYaw + (self.glanceYaw - self.steerYaw) * self.glanceAmt
+    -- poseYaw already folds the steer-follow (front target) and the active glance
+    -- into one continuously-blended yaw (= steerYaw when fully front), so apply it.
+    local finalYaw = self.poseYaw
     qtmp:setFromEuler(0, 0, finalYaw)
     data.res.rot:setMul2(qtmp, data.res.rot)
     -- (the glance back head-tilt is folded into the single Final ROLL block below,
@@ -652,8 +686,8 @@ return function(...)
 
     -- lean the camera sideways along the car's world right vector (forward x up).
     -- All three glances (incl. back) start from the same seat position; this is just
-    -- the per-glance lateral offset, scaled by glanceAmt.
-    local lat = self.glanceLat * self.glanceAmt
+    -- the per-glance lateral offset, already blended into the pose (poseLat).
+    local lat = self.poseLat
     if lat ~= 0 and data.veh ~= nil then
       gFwd:set(data.veh:getDirectionVector())
       gUp:set(data.veh:getDirectionVectorUp())
@@ -706,7 +740,7 @@ return function(...)
     -- if the override is off -- rolled by the total about the look axis. No stock
     -- wobble, and the bank is recomputed fresh so it stays right even glancing 180
     -- back. Add another roll source later by just adding it into totalRoll.
-    local totalRoll = rad((self.glanceRoll or 0) * self.glanceAmt)            -- glance head-tilt
+    local totalRoll = rad(self.poseRoll or 0)            -- glance head-tilt (blended)
     if modsOn and c.speedRoll then totalRoll = totalRoll - self.rollCur end   -- speed lean
     if data.veh ~= nil and (c.camEnable or totalRoll ~= 0) then
       gFwd:set(data.res.rot * vecY)                            -- final look (aim + yaw)
