@@ -26,7 +26,7 @@ angular.module('beamng.apps')
             'border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:2px}',
           '.steerCamApp .sc-row{display:flex;align-items:center;gap:7px;margin:5px 0}',
           '.steerCamApp .sc-row>span{flex:0 0 84px;white-space:nowrap}',
-          '.steerCamApp .sc-row input[type=range]{flex:1 1 auto;min-width:34px;accent-color:#ff7a18}',
+          '.steerCamApp .sc-row input[type=range]{flex:1 1 auto;min-width:34px;accent-color:#ff7a18;outline:none}',
           '.steerCamApp .sc-presets-row{display:flex;align-items:center;gap:7px;margin-bottom:8px}',
           '.steerCamApp .sc-presets-lbl{flex:0 0 auto;font-weight:700;font-size:12px;color:#ff7a18}',
           '.steerCamApp .sc-dd{position:relative;flex:1 1 auto}',
@@ -46,6 +46,19 @@ angular.module('beamng.apps')
           '.steerCamApp.locked .sc-row{opacity:0.5}',
           '.steerCamApp.locked .sc-chk label{cursor:default}',
           '.steerCamApp .sc-row.sc-dim{opacity:0.45}',
+          // slider with a "cap" marker (used by the quicker-glance Fast time): a relative
+          // wrapper holds the range + a dashed orange line at the cap, and the thumb greys
+          // (accent-color) once dragged past it.
+          '.steerCamApp .sc-slider-wrap{flex:1 1 auto;position:relative;display:flex;align-items:center;min-width:34px}',
+          // a short vertical dashed orange tick marking the cap on the track
+          '.steerCamApp .sc-cap-line{position:absolute;top:28%;bottom:28%;width:0;border-left:2px dashed #ff7a18;pointer-events:none;z-index:2;transition:none}',
+          // split slider: a real ORANGE native slider (the interactive control) with a real
+          // DISABLED native slider stacked on top. The disabled one renders in the ACTUAL
+          // disabled grey, and is clipped (from JS) to show only the part PAST the cap -> the
+          // head + fill beyond the limit look exactly like a disabled control. It is fully
+          // inert (disabled + pointer-events:none) so there is ONE control, no second
+          // hover/thumb. transition:none kills an inherited BeamNG clip-path animation.
+          '.steerCamApp .sc-split-cap{position:absolute;left:2px;right:2px;top:50%;transform:translateY(-50%);margin:0;pointer-events:none;z-index:1;transition:none}',
           '.steerCamApp .sc-sec .sc-en{display:flex;align-items:center;justify-content:space-between}',
           '.steerCamApp .sc-sec .sc-en input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-sec-name{display:flex;align-items:center;gap:6px;flex:1 1 auto;cursor:pointer;user-select:none}',
@@ -57,7 +70,7 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-hint{font-size:10px;color:#9a9aa0;margin-top:6px}',
           '.steerCamApp .sc-tipsrc{display:none}',
           // small ⓘ marker appended (dynamically, via ng-if) to anything with a tooltip
-          '.steerCamApp .sc-info{margin-left:3px;font-size:10px;color:#ff7a18;opacity:0.7;cursor:help}',
+          '.steerCamApp .sc-info{margin-left:3px;font-size:10px;color:#ff7a18;opacity:0.7}',
           // hover bubble lives on <body> (escapes the panel overflow), so this rule
           // is intentionally NOT scoped under .steerCamApp:
           '.sc-bubble{position:fixed;z-index:99999;max-width:240px;background:#fff;color:#111;',
@@ -121,7 +134,7 @@ angular.module('beamng.apps')
           '<span class="sc-title">SteerCam</span>',
           '<div class="sc-hdr-right">',
             '<button class="sc-gear" ng-click="openSettings()" title="Settings">&#9881;&#65038;</button>',
-            '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
+            '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Mod enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
           '</div>',
         '</div>',
 
@@ -131,7 +144,7 @@ angular.module('beamng.apps')
             '<button class="sc-dd-head" ng-click="toggleDD(\'preset\')"><span class="sc-dd-cur">{{preset}}<span class="sc-mod-tag" ng-if="modified"> (modified)</span></span><span class="sc-dd-arr">▾</span></button>',
             '<div class="sc-dd-list" ng-show="openDD===\'preset\'">',
               '<div class="sc-dd-opt" ng-repeat="p in presetNames" ng-class="{active: preset===p}" ng-click="choose(p); openDD=null">',
-                '<span class="sc-dd-name">{{p}}</span>',
+                '<span class="sc-dd-name">{{p}}<span class="sc-mod-tag" ng-if="isModified(p)"> (modified)</span></span>',
                 '<span class="sc-lock" ng-if="protectedMap[p]">&#128274;&#65038;</span>',
                 '<span class="sc-del-x" ng-if="canDelete(p)" ng-click="$event.stopPropagation(); askDeletePreset(p)" title="Delete preset">&#215;</span>',
               '</div>',
@@ -233,7 +246,7 @@ angular.module('beamng.apps')
               '</div>',
             '</div></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':cfg.glanceTransition===\'None\'}"><span>Glance time<span class="sc-tipsrc" ng-if="tips.glanceTime">{{tips.glanceTime}}</span><span class="sc-info" ng-if="tips.glanceTime">&#9432;</span></span>',
-            '<input type="range" min="0" max="500" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked || cfg.glanceTransition===\'None\'">',
+            '<input type="range" min="0" max="1000" step="10" ng-model="cfg.glanceTime" ng-change="set(\'glanceTime\', cfg.glanceTime)" ng-disabled="locked || cfg.glanceTransition===\'None\'">',
             '<b>{{cfg.glanceTime}}ms</b></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':cfg.glanceTransition===\'None\'}"><span>Glance curve<span class="sc-tipsrc" ng-if="tips.glanceCurve">{{tips.glanceCurve}}</span><span class="sc-info" ng-if="tips.glanceCurve">&#9432;</span></span>',
             '<div class="sc-dd" ng-mouseleave="openDD=null">',
@@ -242,6 +255,22 @@ angular.module('beamng.apps')
                 '<div class="sc-dd-opt" ng-repeat="o in curveOptions" ng-class="{active: cfg.glanceCurve===o.k}" ng-click="setCurve(o.k); openDD=null">{{o.l}}</div>',
               '</div>',
             '</div></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.glanceFastEnable" ng-change="set(\'glanceFastEnable\', cfg.glanceFastEnable)" ng-disabled="locked"> Glance quicker with speed<span class="sc-tipsrc" ng-if="tips.glanceFastEnable">{{tips.glanceFastEnable}}</span><span class="sc-info" ng-if="tips.glanceFastEnable">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.glanceFastEnable}"><span>Fast time<span class="sc-tipsrc" ng-if="tips.glanceFastTime">{{tips.glanceFastTime}}</span><span class="sc-info" ng-if="tips.glanceFastTime">&#9432;</span></span>',
+            '<div class="sc-slider-wrap sc-split">',
+              // the real, interactive ORANGE native slider (the control)
+              '<input type="range" min="0" max="1000" step="10" ng-model="cfg.glanceFastTime" ng-change="set(\'glanceFastTime\', cfg.glanceFastTime)" ng-disabled="locked || !cfg.glanceFastEnable">',
+              // a real DISABLED native slider on top -> renders in the true disabled grey;
+              // clipped from JS to show only the part past the cap. Inert (disabled + no
+              // pointer events) so it never adds a second hover/thumb.
+              '<input type="range" class="sc-split-cap" min="0" max="1000" step="10" ng-model="cfg.glanceFastTime" disabled tabindex="-1" aria-hidden="true">',
+              '<div class="sc-cap-line" ng-if="cfg.glanceFastEnable && cfg.glanceFastTime > cfg.glanceTime" ng-style="{left:(cfg.glanceTime/10)+\'%\'}"></div>',
+            '</div>',
+            '<b>{{cfg.glanceFastTime}}ms</b></div>',
+          '<div class="sc-hint" ng-if="cfg.glanceFastEnable && cfg.glanceFastTime > cfg.glanceTime">Will not exceed Glance time at: ({{cfg.glanceTime}}ms).</div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.glanceFastEnable}"><span>At speed<span class="sc-tipsrc" ng-if="tips.glanceFastSpeed">{{tips.glanceFastSpeed}}</span><span class="sc-info" ng-if="tips.glanceFastSpeed">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.glanceFastSpeed" ng-change="set(\'glanceFastSpeed\', cfg.glanceFastSpeed)" ng-disabled="locked || !cfg.glanceFastEnable">',
+            '<b style="flex:0 0 64px">{{cfg.glanceFastSpeed}} km/h</b></div>',
         '</div>',
 
         '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.speedModEnable}" ng-click="toggleCollapse(\'speed\')"><span class="sc-tw" ng-class="{open:!collapsed.speed}">▸</span>Immersive extras<span class="sc-tipsrc" ng-if="tips.speed">{{tips.speed}}</span><span class="sc-info" ng-if="tips.speed">&#9432;</span></span><input type="checkbox" ng-model="cfg.speedModEnable" ng-change="setEnable(\'speed\',\'speedModEnable\',cfg.speedModEnable)" ng-disabled="locked"></div></div>',
@@ -271,6 +300,13 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertInertia}"><span>Max lift<span class="sc-tipsrc" ng-if="tips.vertInertiaMax">{{tips.vertInertiaMax}}</span><span class="sc-info" ng-if="tips.vertInertiaMax">&#9432;</span></span>',
             '<input type="range" min="0" max="30" step="0.5" ng-model="cfg.vertInertiaMax" ng-change="set(\'vertInertiaMax\', cfg.vertInertiaMax)" ng-disabled="locked || !cfg.vertInertia">',
             '<b>{{cfg.vertInertiaMax}}cm</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedVibe" ng-change="set(\'speedVibe\', cfg.speedVibe)" ng-disabled="locked"> Speed vibration<span class="sc-tipsrc" ng-if="tips.speedVibe">{{tips.speedVibe}}</span><span class="sc-info" ng-if="tips.speedVibe">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedVibe}"><span>Rumble amount<span class="sc-tipsrc" ng-if="tips.speedVibeAmount">{{tips.speedVibeAmount}}</span><span class="sc-info" ng-if="tips.speedVibeAmount">&#9432;</span></span>',
+            '<input type="range" min="0" max="1" step="0.01" ng-model="cfg.speedVibeAmount" ng-change="set(\'speedVibeAmount\', cfg.speedVibeAmount)" ng-disabled="locked || !cfg.speedVibe">',
+            '<b>{{cfg.speedVibeAmount | number:2}}mm</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedVibe}"><span>Rumble speed<span class="sc-tipsrc" ng-if="tips.speedVibeSpeed">{{tips.speedVibeSpeed}}</span><span class="sc-info" ng-if="tips.speedVibeSpeed">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedVibeSpeed" ng-change="set(\'speedVibeSpeed\', cfg.speedVibeSpeed)" ng-disabled="locked || !cfg.speedVibe">',
+            '<b style="flex:0 0 64px">{{cfg.speedVibeSpeed}} km/h</b></div>',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.engineVibe" ng-change="set(\'engineVibe\', cfg.engineVibe)" ng-disabled="locked"> Engine vibration<span class="sc-tipsrc" ng-if="tips.engineVibe">{{tips.engineVibe}}</span><span class="sc-info" ng-if="tips.engineVibe">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Vibration amount<span class="sc-tipsrc" ng-if="tips.vibeAmount">{{tips.vibeAmount}}</span><span class="sc-info" ng-if="tips.vibeAmount">&#9432;</span></span>',
             '<input type="range" min="0" max="0.5" step="0.01" ng-model="cfg.vibeAmount" ng-change="set(\'vibeAmount\', cfg.vibeAmount)" ng-disabled="locked || !cfg.engineVibe">',
@@ -278,6 +314,10 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Rotation amount<span class="sc-tipsrc" ng-if="tips.vibeRotAmount">{{tips.vibeRotAmount}}</span><span class="sc-info" ng-if="tips.vibeRotAmount">&#9432;</span></span>',
             '<input type="range" min="0" max="1" step="0.01" ng-model="cfg.vibeRotAmount" ng-change="set(\'vibeRotAmount\', cfg.vibeRotAmount)" ng-disabled="locked || !cfg.engineVibe">',
             '<b>{{cfg.vibeRotAmount}}°</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.straightenEnable" ng-change="set(\'straightenEnable\', cfg.straightenEnable)" ng-disabled="locked"> Straighten at speed<span class="sc-tipsrc" ng-if="tips.straightenEnable">{{tips.straightenEnable}}</span><span class="sc-info" ng-if="tips.straightenEnable">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.straightenEnable}"><span>Straighten speed<span class="sc-tipsrc" ng-if="tips.straightenSpeed">{{tips.straightenSpeed}}</span><span class="sc-info" ng-if="tips.straightenSpeed">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.straightenSpeed" ng-change="set(\'straightenSpeed\', cfg.straightenSpeed)" ng-disabled="locked || !cfg.straightenEnable">',
+            '<b style="flex:0 0 64px">{{cfg.straightenSpeed}} km/h</b></div>',
         '</div>',
 
         '<div class="sc-hint" ng-if="modified">Tweaks are unsaved — use Reset to discard, or Save changes / Save as new in the Presets dropdown.</div>',
@@ -309,6 +349,7 @@ angular.module('beamng.apps')
       // fallback list; replaced by the real (file-scanned) list once Lua answers
       scope.presetNames = ['Default', "Dev's Preset"];
       scope.protectedMap = { 'Default': true, "Dev's Preset": true };   // name -> safe tag
+      scope.modifiedMap = {};     // name -> has unsaved tweaks (for the dropdown list)
       scope.modal = null;         // shared confirm/prompt overlay {text, yes, action, input?, value?}
       scope.preset = 'Default';
       scope.modified = false;     // true when the selected preset has unsaved overrides
@@ -334,11 +375,11 @@ angular.module('beamng.apps')
         camUp: '',
         camYaw: '',
         camPitch: '',
-        stableHorizon: '0 = horizon banks fully with the car; 100 = stays level (eases off on steep banks). Same as the game\'s Lock-roll-to-horizon.',
-        camFov: '',
-        nearClip: 'How close to the camera things start drawing. Lower hides nearby geometry (e.g. the roof poking in at high FOV); too low can cause flicker on distant surfaces. Recommended is 0.02 - 0.05 m (Game native is 0.1 m).',
-        angle: 'How far the view turns at full steering lock.',
-        reach: 'How much steering reaches the full angle. Lower = more reactive to small inputs.',
+        stableHorizon: '0 = horizon banks fully with the car; 100 = stays level (eases on steep banks). Same as native Lock-roll-to-horizon.',
+        camFov: 'Field of view',
+        nearClip: 'How close to the camera things start drawing. Lower hides nearby geometry (e.g. the roof poking in at high FOV); too low can cause flicker on distant surfaces. Recommended range is 0.02 - 0.05 m (Game native is 0.1 m).',
+        angle: '',
+        reach: 'How much steering input is needed before reaching the full angle.',
         stiffness: 'How quickly the camera moves. Higher = snappier.',
         reverseSteer: 'While reversing, mirror the turn the other way.',
         reverseAngle: '',
@@ -348,23 +389,31 @@ angular.module('beamng.apps')
         fadeFloor: 'How much of the camera pan is kept even at a standstill. 0 = none until moving.',
         glanceLeft: '',
         glanceRight: '',
-        glanceTransition: 'How glance time is used. None = instant snap. Fixed time = same time for any angle. Constant speed = time scales with the angle, like turning your head at a steady rate (glance time = a full 180° turn).',
+        glanceTransition: 'None = instant snap | Fixed time = same time for any angle | Constant speed = time scales with the angle, like turning your head at a steady rate (glance time = a full 180° turn).',
         glanceTime: '',
-        glanceCurve: 'Easing curve for the glance motion.',
+        glanceCurve: 'Easing curve for the glance animation (lerp).',
+        glanceFastEnable: 'Glances get quicker at speed.',
+        glanceFastTime: '',
+        glanceFastSpeed: '',
         glanceOffsetLeft: '',
         glanceOffsetRight: '',
         vertigo: 'Widen the FOV as you speed up, with a matching forward dolly (the vertigo warp).',
         vertigoFov: 'Max extra FOV added by the time you reach the speed range.',
         vertigoDolly: 'Distance kept "pinned" by the counter-dolly. 0 = FOV only, no camera move.',
-        speedRoll: 'Lean the head into corners. Source is set below; max lean is Roll change.',
-        rollSource: 'What drives the corner lean. Steering = from steering input, scaled by speed. Inertia = from real lateral g-force (full lean at ~1g), so it follows actual cornering load and slides.',
-        rollAngle: 'Max lean angle (at full steering / speed range, or ~1g of cornering in Inertia mode).',
-        speedRange: 'Speed at which the both the vertigo and speed roll effects will reach full strength.',
-        vertInertia: 'Driver lifts off the seat when the car drops away (cresting, going light, airborne) and sinks under compression. A vertical offset on top of the camera Up offset.',
-        vertInertiaMax: 'How far the head can travel at most (full at ~1g of vertical g-force).',
-        engineVibe: 'A small rapid camera shake as the engine fires up (just after a brief ignition delay), plus a gentler quarter-strength shudder when you switch it off. (Road texture is mostly absorbed by the suspension, so it is not simulated.)',
-        vibeAmount: 'How far the shake moves the camera at its peak. Small on purpose, so it reads as a buzz without being nauseating.',
-        vibeRotAmount: 'How much the shake also rotates the view at its peak. Keep it tiny - a fraction of a degree feels best.'
+        speedRoll: 'Simulate leaning your head into corners at speed via camera roll.',
+        rollSource: 'Steering = steering input | Inertia = from real lateral g-force (full effect at ~1g)',
+        rollAngle: '',
+        speedRange: '',
+        vertInertia: 'Driver lifts off the seat when the car is airborne and sinks under compression.',
+        vertInertiaMax: '',
+        engineVibe: 'Simulate the engine vibration with camera shake when turning ignition on and off.',
+        vibeAmount: '',
+        vibeRotAmount: '',
+        speedVibe: 'Camera vibration that grows with speed.',
+        speedVibeAmount: '',
+        speedVibeSpeed: '',
+        straightenEnable: 'Center the camera "Rotate L/R" pan modifier (in Camera settings override) when driving at speed',
+        straightenSpeed: ''
       };
       // per-section twirl state; every section starts open (none collapsed)
       scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
@@ -374,7 +423,8 @@ angular.module('beamng.apps')
         { k: 'Linear', l: 'Linear' },
         { k: 'S-curve', l: 'S-curve' },
         { k: 'Ease1', l: 'Ease1' },
-        { k: 'Ease2', l: 'Ease2' }
+        { k: 'Ease2', l: 'Ease2' },
+        { k: 'Jump', l: 'Jump' }
       ];
       scope.curveLabel = function (k) {
         for (var i = 0; i < scope.curveOptions.length; i++) {
@@ -454,11 +504,14 @@ angular.module('beamng.apps')
         angle: 18, reach: 35, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
         glanceEnable: true,
         glanceLeft: 115, glanceRight: 115, glanceBack: 0, glanceTime: 120, glanceCurve: 'Exponential', glanceTransition: 'Fixed time',
+        glanceFastEnable: false, glanceFastTime: 60, glanceFastSpeed: 120,
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10, glanceOffsetBack: 0, glanceBackRoll: 0,
         speedModEnable: true,
         vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160,
         rollSource: 'Steering', vertInertia: false, vertInertiaMax: 8,
-        engineVibe: false, vibeAmount: 0.2, vibeRotAmount: 0.15
+        engineVibe: false, vibeAmount: 0.2, vibeRotAmount: 0.15,
+        speedVibe: false, speedVibeAmount: 0.5, speedVibeSpeed: 200,
+        straightenEnable: false, straightenSpeed: 120
       };
 
       function pushOne(key, val) {
@@ -495,17 +548,18 @@ angular.module('beamng.apps')
         // name->protected map (so the dropdown can show a lock and block actions).
         bngApi.engineLua('steerCam and steerCam.getPresetMeta() or nil', function (meta) {
           if (!meta || typeof meta !== 'object') { return; }
-          var arr = [], prot = {};
+          var arr = [], prot = {}, mod = {};
           for (var k in meta) {
             if (!meta.hasOwnProperty(k)) { continue; }
             var m = meta[k];
             if (m && typeof m === 'object' && m.name) {
               arr.push(m.name);
               if (m.protected) { prot[m.name] = true; }
+              if (m.modified) { mod[m.name] = true; }
             }
           }
           if (arr.length) {
-            scope.$evalAsync(function () { scope.presetNames = arr; scope.protectedMap = prot; });
+            scope.$evalAsync(function () { scope.presetNames = arr; scope.protectedMap = prot; scope.modifiedMap = mod; });
           }
         });
       }
@@ -576,6 +630,13 @@ angular.module('beamng.apps')
       // a preset is deletable when it's not protected (Default/Dev's)
       scope.canDelete = function (name) {
         return !!name && !scope.protectedMap[name];
+      };
+
+      // does a preset have unsaved tweaks? The active one uses the live flag (updates
+      // as you drag); the rest use the map from the last getPresetMeta (they don't
+      // change while you're on another preset).
+      scope.isModified = function (name) {
+        return (name === scope.preset) ? scope.modified : !!scope.modifiedMap[name];
       };
 
       // dropdown "Save as new preset...": prompt for a name, then create -- or confirm
@@ -738,6 +799,19 @@ angular.module('beamng.apps')
       // glance keybind cancels the preview (Lua clears it; the UI can't know otherwise)
       var glancePoll = setInterval(syncGlance, 200);
       scope.$on('$destroy', function () { clearInterval(glancePoll); });
+
+      // Clip the disabled grey overlay so it shows ONLY the part past the cap (the grey
+      // head + fill beyond the limit). Hidden entirely when under the cap. Set directly on
+      // the element because ng-style doesn't reliably apply clip-path in this CEF.
+      scope.$watchGroup(['cfg.glanceFastTime', 'cfg.glanceTime'], function () {
+        var el = element[0] && element[0].querySelector('.sc-split-cap');
+        if (!el) { return; }
+        var gt = scope.cfg.glanceTime || 0, ft = scope.cfg.glanceFastTime || 0;
+        el.value = ft;   // keep the disabled overlay's thumb on the value (disabled inputs)
+        var clip = (ft > gt) ? ('inset(0 0 0 ' + (gt / 10) + '%)') : 'inset(0 100% 0 0)';
+        el.style.clipPath = clip;
+        el.style.webkitClipPath = clip;
+      });
 
       element.ready(function () {
         load();

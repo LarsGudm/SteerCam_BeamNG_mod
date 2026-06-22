@@ -113,6 +113,11 @@ Controls:
   Glance time        0-500 ms   how fast a glance snaps in/out (0 = instant)
   Glance curve                  easing curve (dropdown): Exponential (native) /
                                 Linear / S-curve / Ease1 / Ease2
+  Glance quicker with speed     glances get faster the quicker you drive
+  Fast time          0-500 ms   the glance time at full speed; capped at Glance time
+                                (set it higher and the slider greys past the cap with
+                                a marker - no faster than the base)
+  At speed           20-400     km/h at which glances reach Fast time
 
 Hover any category name or setting label (marked with a small i) for a short
 description of what it does.
@@ -148,12 +153,20 @@ Immersive extras (optional cabin-feel effects; SteerCam view only):
                                 under compression -- a vertical offset added on top
                                 of the camera Up offset
   Max lift           0-30 cm    how far the head travels at most (full at ~1g)
+  Speed vibration               a continuous camera buzz that grows with speed (tyre/
+                                road rumble), separate from the engine
+  Rumble amount     0-1 mm      how far the rumble moves the camera at full speed
+  Rumble speed       20-400     km/h at which the rumble reaches full strength
   Engine vibration              a small rapid camera buzz as the engine fires up (just
                                 after a brief ignition delay), plus a gentler quarter-
                                 strength shudder when you switch it off (road texture
                                 is mostly suspension-damped, so not shaken)
   Vibration amount   0-0.5 cm   how far the buzz moves the camera at its peak
   Rotation amount    0-1 deg    how much the buzz also rotates the view (keep it tiny)
+  Straighten at speed           fade the camera "Rotate L/R" pan (Camera settings
+                                override) toward zero as you speed up, so the view
+                                re-centres straight ahead on the highway (S-curve fade)
+  Straighten speed   20-400     km/h at which the L/R pan is fully cancelled
 
 Changes apply instantly and persist between drives. You can keep the panel open
 while driving to dial in the feel, then remove it.

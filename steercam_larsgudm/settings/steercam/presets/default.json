@@ -34,6 +34,9 @@
   "glanceBackRoll": 0.0,
   "glanceCurve": "Exponential",
   "glanceTransition": "Fixed time",
+  "glanceFastEnable": false,
+  "glanceFastTime": 60.0,
+  "glanceFastSpeed": 120.0,
 
   "speedModEnable": false,
   "vertigo": false,
@@ -47,5 +50,10 @@
   "vertInertiaMax": 8.0,
   "engineVibe": false,
   "vibeAmount": 0.2,
-  "vibeRotAmount": 0.15
+  "vibeRotAmount": 0.15,
+  "speedVibe": false,
+  "speedVibeAmount": 0.5,
+  "speedVibeSpeed": 200.0,
+  "straightenEnable": false,
+  "straightenSpeed": 120.0
 }

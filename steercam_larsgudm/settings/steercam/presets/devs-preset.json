@@ -23,6 +23,9 @@
   "glanceRight":75,
   "glanceTime":190,
   "glanceTransition":"Constant speed",
+  "glanceFastEnable":false,
+  "glanceFastTime":60,
+  "glanceFastSpeed":120,
   "nearClip":0.05,
   "order":100,
   "reach":70,
@@ -44,5 +47,10 @@
   "vertigoDolly":0.29,
   "vertigoFov":10,
   "vibeAmount":0.04,
-  "vibeRotAmount":0.03
+  "vibeRotAmount":0.03,
+  "speedVibe":false,
+  "speedVibeAmount":0.5,
+  "speedVibeSpeed":200,
+  "straightenEnable":false,
+  "straightenSpeed":120
 }
