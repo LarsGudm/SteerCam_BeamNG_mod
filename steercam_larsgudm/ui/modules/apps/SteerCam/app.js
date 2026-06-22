@@ -94,11 +94,35 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-confirm-btns button{background:rgba(255,255,255,0.08);color:#e8e8ea;',
             'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer}',
           '.steerCamApp .sc-confirm-btns .yes{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
+          // header: gear (Settings) + Enabled, on the right of the title row
+          '.steerCamApp .sc-hdr-right{display:flex;align-items:center;gap:8px}',
+          '.steerCamApp .sc-gear{background:none;border:none;color:#ffae6b;font-size:15px;line-height:1;cursor:pointer;padding:0}',
+          '.steerCamApp .sc-gear:hover{color:#ff7a18}',
+          // settings overlay (darkens the panel)
+          '.steerCamApp .sc-settings{position:absolute;inset:0;z-index:300;display:flex;align-items:center;',
+            'justify-content:center;background:rgba(0,0,0,0.62);border-radius:7px}',
+          '.steerCamApp .sc-settings-box{background:#1c1c20;border:1px solid rgba(255,255,255,0.2);',
+            'border-radius:6px;padding:12px 14px;box-sizing:border-box;width:calc(100% - 100px)}',  // 50px each side
+          '.steerCamApp .sc-set-close{width:100%;margin-top:12px;background:#ff7a18;border:1px solid #ff7a18;',
+            'color:#161616;font-weight:700;border-radius:4px;padding:5px 0;font-size:12px;cursor:pointer}',
+          '.steerCamApp .sc-set-close:hover{background:#ff8c33}',
+          '.steerCamApp .sc-settings-hd{display:flex;justify-content:space-between;align-items:center;',
+            'font-weight:700;color:#ff7a18;font-size:13px;margin-bottom:8px}',
+          '.steerCamApp .sc-settings-x{cursor:pointer;font-size:17px;line-height:1;opacity:0.7;color:#e8e8ea}',
+          '.steerCamApp .sc-settings-x:hover{opacity:1}',
+          '.steerCamApp .sc-set-chk{display:flex;align-items:center;gap:7px;font-size:11px;color:#cfcfd4;cursor:pointer;margin:9px 0 0}',
+          '.steerCamApp .sc-set-chk input{accent-color:#ff7a18;margin:0}',
+          '.steerCamApp .sc-set-note{font-size:10px;color:#9a9aa0;margin:3px 0 4px 22px}',
+          '.steerCamApp .sc-set-ver{font-size:10px;color:#7a7a80;border-top:1px solid rgba(255,255,255,0.12);',
+            'margin-top:10px;padding-top:8px;text-align:center}',
         '</style>',
 
         '<div class="sc-title-row">',
           '<span class="sc-title">SteerCam</span>',
-          '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
+          '<div class="sc-hdr-right">',
+            '<button class="sc-gear" ng-click="openSettings()" title="Settings">&#9881;&#65038;</button>',
+            '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
+          '</div>',
         '</div>',
 
         '<div class="sc-presets-row">',
@@ -112,14 +136,13 @@ angular.module('beamng.apps')
                 '<span class="sc-del-x" ng-if="canDelete(p)" ng-click="$event.stopPropagation(); askDeletePreset(p)" title="Delete preset">&#215;</span>',
               '</div>',
               '<div class="sc-dd-sep"></div>',
-              '<div class="sc-dd-opt sc-dd-save" ng-if="modified && preset!==\'Custom\' && !protectedMap[preset]" ng-click="saveChanges()">&#10003; Save changes to this preset</div>',
+              '<div class="sc-dd-opt sc-dd-save" ng-if="canSaveChanges()" ng-click="saveChanges()">&#10003; Save changes to this preset</div>',
               '<div class="sc-dd-opt sc-dd-save" ng-click="saveAsNew()">+ Save as new preset…</div>',
+              '<div class="sc-dd-opt sc-dd-save" ng-click="openPresetFolder()">Open preset folder…</div>',
             '</div>',
           '</div>',
           '<button class="sc-reset-btn" ng-if="modified" ng-click="resetChanges()" title="Discard changes (back to the saved preset)">Reset</button>',
         '</div>',
-
-        '<label class="sc-mirror"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Driver seat side mirrors settings<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span><span class="sc-info" ng-if="tips.mirror">&#9432;</span></label>',
 
         '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.camEnable}" ng-click="toggleCollapse(\'cam\')"><span class="sc-tw" ng-class="{open:!collapsed.cam}">▸</span>Camera settings override<span class="sc-tipsrc" ng-if="tips.cam">{{tips.cam}}</span><span class="sc-info" ng-if="tips.cam">&#9432;</span></span><input type="checkbox" ng-model="cfg.camEnable" ng-change="setEnable(\'cam\',\'camEnable\',cfg.camEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.cam" ng-class="{\'sc-off\':!cfg.camEnable}">',
@@ -257,7 +280,7 @@ angular.module('beamng.apps')
             '<b>{{cfg.vibeRotAmount}}°</b></div>',
         '</div>',
 
-        '<div class="sc-hint" ng-if="modified">Tweaks are unsaved — use Reset to discard, or Save changes / Save as new in the Presets menu.</div>',
+        '<div class="sc-hint" ng-if="modified">Tweaks are unsaved — use Reset to discard, or Save changes / Save as new in the Presets dropdown.</div>',
         '<div class="sc-confirm" ng-if="modal">',
           '<div class="sc-confirm-box">',
             '<div class="sc-confirm-text">{{modal.text}}</div>',
@@ -268,13 +291,23 @@ angular.module('beamng.apps')
             '</div>',
           '</div>',
         '</div>',
+        '<div class="sc-settings" ng-if="settingsOpen" ng-click="closeSettings()">',
+          '<div class="sc-settings-box" ng-click="$event.stopPropagation()">',
+            '<div class="sc-settings-hd"><span>Settings</span><span class="sc-settings-x" ng-click="closeSettings()" title="Close">&#215;</span></div>',
+            '<label class="sc-set-chk"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Mirror settings on right-hand-drive cars<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span><span class="sc-info" ng-if="tips.mirror">&#9432;</span></label>',
+            '<label class="sc-set-chk"><input type="checkbox" ng-model="notaryEnabled" ng-change="setNotary(notaryEnabled)"> Per-vehicle configs<span class="sc-tipsrc" ng-if="tips.notary">{{tips.notary}}</span><span class="sc-info" ng-if="tips.notary">&#9432;</span></label>',
+            '<div class="sc-set-note">Remembers a separate config per vehicle. Coming soon — the toggle is saved for when it lands.</div>',
+            '<div class="sc-set-ver">SteerCam v{{version}} &middot; by LarsGudm</div>',
+            '<button class="sc-set-close" ng-click="closeSettings()">Close</button>',
+          '</div>',
+        '</div>',
       '</div>'
     ].join(''),
     replace: true,
     restrict: 'EA',
     link: function (scope, element, attrs) {
       // fallback list; replaced by the real (file-scanned) list once Lua answers
-      scope.presetNames = ['Default', "Dev's Preset", 'Custom'];
+      scope.presetNames = ['Default', "Dev's Preset"];
       scope.protectedMap = { 'Default': true, "Dev's Preset": true };   // name -> safe tag
       scope.modal = null;         // shared confirm/prompt overlay {text, yes, action, input?, value?}
       scope.preset = 'Default';
@@ -283,12 +316,16 @@ angular.module('beamng.apps')
       scope.glanceSide = 'none';
       scope.modEnabled = true;   // global mod on/off (independent of preset lock)
       scope.mirrorSeat = true;   // global: mirror side-specific settings on RHD cars
+      scope.notaryEnabled = false;   // per-vehicle configs (placeholder; not active yet)
+      scope.settingsOpen = false;    // the Settings overlay
+      scope.version = '1.0';         // shown in Settings; replaced by the Lua value on load
       // Hover hints (shown in the bottom hint bar). Add text to give a category/
       // control a hint, leave it '' for none. UI text only -- not per-preset, so it
       // lives here, not in the preset JSONs. Keyed by category id / setting name.
       scope.tips = {
         modEnable: '',
         mirror: 'Settings describe a left-hand-drive seat. In right-hand-drive cars; camera pan, glance angle, etc. auto-mirror so it feels the same.',
+        notary: 'When on, each vehicle remembers its own SteerCam config automatically. Not active yet — the toggle is saved for when the feature ships.',
         cam: '',
         steer: 'Turns the view camera view based on steering input',
         glance: 'Snap the view to different angles. Bind keys in Options > Controls > Camera',
@@ -390,6 +427,27 @@ angular.module('beamng.apps')
       scope.setMirror = function (v) {
         bngApi.engineLua('if steerCam then steerCam.setMirror(' + (v ? 'true' : 'false') + ') end');
       };
+
+      // per-vehicle notary toggle (placeholder: persisted, no behaviour yet)
+      scope.setNotary = function (v) {
+        bngApi.engineLua('if steerCam then steerCam.setNotary(' + (v ? 'true' : 'false') + ') end');
+      };
+
+      // ----- Settings overlay ----------------------------------------------------
+      scope.openSettings = function () { scope.openDD = null; scope.settingsOpen = true; };
+      scope.closeSettings = function () { scope.settingsOpen = false; };
+
+      // "Save changes to this preset" is only valid on a non-protected preset that
+      // actually has unsaved tweaks -- otherwise it's hidden.
+      scope.canSaveChanges = function () {
+        return scope.modified && !scope.protectedMap[scope.preset];
+      };
+
+      // open the presets folder in the OS file browser (find / share / hand-edit)
+      scope.openPresetFolder = function () {
+        scope.openDD = null;
+        bngApi.engineLua('if steerCam then steerCam.openPresetFolder() end');
+      };
       scope.cfg = {
         camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0, nearClip: 0.05,
         steerEnable: true,
@@ -413,9 +471,8 @@ angular.module('beamng.apps')
           if (isNaN(n)) { return; }
           bngApi.engineLua("if steerCam then steerCam.set('" + key + "', " + n + ") end");
         }
-        // editing a file preset writes its override layer -> mark it modified live
-        // (Custom edits the profile directly, so it's never "modified")
-        if (scope.preset !== 'Custom') { scope.modified = true; }
+        // any edit writes the selected preset's override layer -> mark it modified live
+        scope.modified = true;
       }
 
       // reflect the LIVE glance (hold keybind > toggle keybind > UI preview) so the
@@ -465,6 +522,8 @@ angular.module('beamng.apps')
               scope.modified = !!cfg.modified;
               if (typeof cfg.modEnabled === 'boolean') { scope.modEnabled = cfg.modEnabled; }
               if (typeof cfg.mirrorSeat === 'boolean') { scope.mirrorSeat = cfg.mirrorSeat; }
+              if (typeof cfg.notaryEnabled === 'boolean') { scope.notaryEnabled = cfg.notaryEnabled; }
+              if (cfg.version) { scope.version = cfg.version; }
               // collapse state is independent of enable state; every section starts
               // open so toggling a section off never hides its settings.
               scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
@@ -493,7 +552,7 @@ angular.module('beamng.apps')
       scope.saveChanges = function () {
         scope.openDD = null;
         var name = scope.preset;
-        scope.modal = { text: 'Save changes to the preset "' + name + '"? This updates its file.', yes: 'Save', action: function () {
+        scope.modal = { text: 'Save changes to the preset "' + name + '"?', yes: 'Save', action: function () {
           bngApi.engineLua("steerCam and steerCam.saveChanges() or nil", function () {
             scope.$evalAsync(function () { load(); });
           });
@@ -514,9 +573,9 @@ angular.module('beamng.apps')
         });
       }
 
-      // a preset is deletable when it's not Custom and not protected (Default/Dev's)
+      // a preset is deletable when it's not protected (Default/Dev's)
       scope.canDelete = function (name) {
-        return !!name && name !== 'Custom' && !scope.protectedMap[name];
+        return !!name && !scope.protectedMap[name];
       };
 
       // dropdown "Save as new preset...": prompt for a name, then create -- or confirm
@@ -558,7 +617,7 @@ angular.module('beamng.apps')
       };
       scope.modalNo = function () { scope.modal = null; };
 
-      // edit a slider/checkbox (only possible while on Custom)
+      // edit a slider/checkbox (writes the selected preset's override layer)
       scope.set = function (key, val) {
         if (scope.locked) { return; }
         pushOne(key, val);

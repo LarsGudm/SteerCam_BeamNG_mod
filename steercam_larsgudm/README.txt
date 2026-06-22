@@ -30,12 +30,16 @@ The "Enabled" checkbox at the top-right (next to the title) is the master switch
 for the whole mod: untick it and the camera reverts to the plain stock driver
 view (all SteerCam effects off) without changing your preset or saved settings.
 
-"Driver seat mirrors settings" (below the Presets row, on by default) treats your
-saved values as a LEFT-hand-drive seat and auto-mirrors the side-specific ones in
-right-hand-drive cars: the camera pan (Rotate L/R) flips, and the glance Left/
-Right angle + offset swap. Keybinds never flip -- the right glance still looks
-right, it just uses your left-side tuning. Turn it off to use your values as-is in
-every car.
+The gear icon (top-right) opens Settings. Preset actions (Save as new / Save
+changes / Open preset folder) live inside the Presets dropdown.
+
+"Mirror settings on right-hand-drive cars" (in Settings, the gear icon; on by
+default) treats your saved values as a LEFT-hand-drive seat and auto-mirrors the
+side-specific ones in right-hand-drive cars: the camera pan (Rotate L/R) flips,
+and the glance Left/Right angle + offset swap. Keybinds never flip -- the right
+glance still looks right, it just uses your left-side tuning. Turn it off to use
+your values as-is in every car. (Settings also has a "Per-vehicle configs" toggle,
+coming soon, and shows the mod version.)
 
 Profiles, picked from the "Presets" dropdown at the top. EVERY profile is editable:
 tweak any slider and the dropdown shows "(modified)". A "Reset" button discards
@@ -52,9 +56,6 @@ remembers its own tweaks, so switching back and forth keeps them.
   (more)        Any preset you make or drop on disk - see ADDING PRESETS below.
                 Your own presets can be edited, Saved over, or deleted (× in the menu,
                 with a confirm).
-
-  Custom        A free scratch profile. Edits save straight to it (no "modified"
-                state); starts from the Default values.
 
 Controls:
   Camera settings override      (section) seat position, aim + FOV override
@@ -177,20 +178,23 @@ Bind keys in Esc -> Options -> Controls -> Bindings (Camera category):
 The actions ship UNBOUND - assign whatever keys you like. Glance only affects
 the view while the SteerCam camera is the active view (press C).
 
-Tuning the angles: open the panel, switch to Custom, click "Preview left/back/
-right" to hold the glance, then drag the matching angle slider until it feels
+Tuning the angles: open the panel, click "Preview left/back/right" to hold the
+glance, then drag the matching angle slider until it feels
 right. Click the preview button again to release. Pressing a glance keybind also
 cancels an active preview, so you can test the real binding right away.
 
 
 ADDING PRESETS
 --------------
-Easiest way - from the app: tune the look (on Custom, or any profile), type a
-name in the box under the Presets dropdown and hit Save. It's written as a .json
-in your User Folder and is then available for every car. Saving onto an existing
-name of your own asks to overwrite; Delete (next to the dropdown) removes the
-selected one. Default and Dev's Preset are PROTECTED and can't be overwritten or
-deleted from the app (they show a lock).
+Easiest way - from the app: tune the look (any profile is editable - a tweaked
+preset shows "(modified)"; Reset discards). Then open the Presets dropdown and use
+"Save as new preset" for a new one, or "Save changes to this preset" to update the
+current (your own) preset. New presets are written as .json in your User Folder and
+are available for every car. "Open preset folder" (also in the dropdown) jumps
+straight to them. Delete is the (x) next to a preset in the dropdown (with a
+confirm). Default and Dev's Preset are PROTECTED - they can't be overwritten or
+deleted from the app (they show a lock), but you can still tweak them and Save as
+new.
 
 By hand: presets are plain .json files. Any .json in the presets folder shows up
 in the dropdown automatically. To add one without unzipping the mod, drop it in

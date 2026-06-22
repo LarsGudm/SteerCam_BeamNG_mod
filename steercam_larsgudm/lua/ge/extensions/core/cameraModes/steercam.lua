@@ -16,6 +16,7 @@
 
 if not steerCam then
   steerCam = {}
+  steerCam.version = "1.0"   -- shown in the Settings overlay; bump on release (keep app.json in sync)
 
   local function getNum(k, d)
     local v = settings and settings.getValue and settings.getValue(k)
@@ -149,63 +150,12 @@ if not steerCam then
   end
   steerCam.loadPresets()
 
-  -- The Custom profile (editable; starts as a copy of Default, then persists).
-  steerCam.custom = {
-    camEnable  = getBool("steerCam_custom_camEnable", steerCam.defaults.camEnable),
-    camFwd     = getNum("steerCam_custom_camFwd",     steerCam.defaults.camFwd),
-    camUp      = getNum("steerCam_custom_camUp",      steerCam.defaults.camUp),
-    camYaw     = getNum("steerCam_custom_camYaw",     steerCam.defaults.camYaw),
-    camPitch   = getNum("steerCam_custom_camPitch",   steerCam.defaults.camPitch),
-    camFov     = getNum("steerCam_custom_camFov",     steerCam.defaults.camFov),
-    stableHorizon = getNum("steerCam_custom_stableHorizon", steerCam.defaults.stableHorizon),
-    nearClip   = getNum("steerCam_custom_nearClip",   steerCam.defaults.nearClip),
-    steerEnable = getBool("steerCam_custom_steerEnable", steerCam.defaults.steerEnable),
-    angle      = getNum("steerCam_custom_angle",       steerCam.defaults.angle),
-    reach      = getNum("steerCam_custom_reach",       steerCam.defaults.reach),
-    stiffness  = getNum("steerCam_custom_stiffness",   steerCam.defaults.stiffness),
-    reverseSteer = getBool("steerCam_custom_reverseSteer", steerCam.defaults.reverseSteer),
-    reverseAngle = getNum("steerCam_custom_reverseAngle",  steerCam.defaults.reverseAngle),
-    reverseTime  = getNum("steerCam_custom_reverseTime",   steerCam.defaults.reverseTime),
-    speedFade  = getBool("steerCam_custom_speedFade",  steerCam.defaults.speedFade),
-    fadeSpeed  = getNum("steerCam_custom_fadeSpeed",   steerCam.defaults.fadeSpeed),
-    fadeFloor  = getNum("steerCam_custom_fadeFloor",   steerCam.defaults.fadeFloor),
-    glanceEnable = getBool("steerCam_custom_glanceEnable", steerCam.defaults.glanceEnable),
-    glanceLeft  = getNum("steerCam_custom_glanceLeft",   steerCam.defaults.glanceLeft),
-    glanceRight = getNum("steerCam_custom_glanceRight",  steerCam.defaults.glanceRight),
-    glanceBack  = getNum("steerCam_custom_glanceBack",   steerCam.defaults.glanceBack),
-    glanceTime  = getNum("steerCam_custom_glanceTime",   steerCam.defaults.glanceTime),
-    glanceOffsetLeft  = getNum("steerCam_custom_glanceOffsetLeft",  steerCam.defaults.glanceOffsetLeft),
-    glanceOffsetRight = getNum("steerCam_custom_glanceOffsetRight", steerCam.defaults.glanceOffsetRight),
-    glanceOffsetBack  = getNum("steerCam_custom_glanceOffsetBack",  steerCam.defaults.glanceOffsetBack),
-    glanceBackRoll    = getNum("steerCam_custom_glanceBackRoll",    steerCam.defaults.glanceBackRoll),
-    glanceCurve = getStr("steerCam_custom_glanceCurve", steerCam.defaults.glanceCurve),
-    glanceTransition = getStr("steerCam_custom_glanceTransition", steerCam.defaults.glanceTransition),
-    speedModEnable = getBool("steerCam_custom_speedModEnable", steerCam.defaults.speedModEnable),
-    vertigo    = getBool("steerCam_custom_vertigo",    steerCam.defaults.vertigo),
-    vertigoFov = getNum("steerCam_custom_vertigoFov",  steerCam.defaults.vertigoFov),
-    vertigoDolly = getNum("steerCam_custom_vertigoDolly", steerCam.defaults.vertigoDolly),
-    speedRoll  = getBool("steerCam_custom_speedRoll",  steerCam.defaults.speedRoll),
-    rollAngle  = getNum("steerCam_custom_rollAngle",   steerCam.defaults.rollAngle),
-    speedRange = getNum("steerCam_custom_speedRange",  steerCam.defaults.speedRange),
-    rollSource = getStr("steerCam_custom_rollSource",  steerCam.defaults.rollSource),
-    vertInertia = getBool("steerCam_custom_vertInertia", steerCam.defaults.vertInertia),
-    vertInertiaMax = getNum("steerCam_custom_vertInertiaMax", steerCam.defaults.vertInertiaMax),
-    engineVibe = getBool("steerCam_custom_engineVibe", steerCam.defaults.engineVibe),
-    vibeAmount = getNum("steerCam_custom_vibeAmount", steerCam.defaults.vibeAmount),
-    vibeRotAmount = getNum("steerCam_custom_vibeRotAmount", steerCam.defaults.vibeRotAmount),
-  }
-  -- Clamp saved Custom numbers into their current range, so a value persisted under
-  -- an older, wider range (e.g. before a max was lowered) loads sane instead of out
-  -- of bounds. Bools/strings are untouched.
-  for k, v in pairs(steerCam.custom) do
-    local r = ranges[k]
-    if r and type(v) == "number" then steerCam.custom[k] = clampv(v, r[1], r[2]) end
-  end
+  -- (The old editable "Custom" profile was removed: every preset is now editable via
+  --  the per-preset override layer below, so a separate scratch profile is redundant.)
 
   -- Edit model: a selected base preset + a sparse per-preset OVERRIDE layer (your live
-  -- tweaks on top of it). "Custom" is the directly-editable scratch profile (its values
-  -- persist as steerCam_custom_*); every file preset is editable too, with tweaks kept
-  -- in steerCam.overrides[name] until you Reset (discard) or Save (bake into the file).
+  -- tweaks on top of it). Every preset is editable; tweaks are kept in
+  -- steerCam.overrides[name] until you Reset (discard) or Save (bake into the file).
   -- steerCam.cfg is the merged result the camera reads. Overrides persist as one blob.
   steerCam.overrides = {}
   do
@@ -217,10 +167,9 @@ if not steerCam then
   end
   local function saveOverrides() save("steerCam_overrides", jsonEncode(steerCam.overrides)) end
 
-  -- (re)build steerCam.cfg = base preset merged with its overrides (or Custom direct)
+  -- (re)build steerCam.cfg = the selected base preset merged with its overrides
   function steerCam.applyCfg()
     local name = steerCam.preset
-    if name == "Custom" then steerCam.cfg = steerCam.custom; return end
     local base = steerCam.presets[name] or steerCam.presets["Default"] or steerCam.defaults
     local ov = steerCam.overrides[name]
     if not ov or next(ov) == nil then steerCam.cfg = base; return end   -- base stays read-only
@@ -231,7 +180,7 @@ if not steerCam then
   end
 
   steerCam.preset = getStr("steerCam_preset", "Default")
-  if steerCam.preset ~= "Custom" and not steerCam.presets[steerCam.preset] then steerCam.preset = "Default" end
+  if not steerCam.presets[steerCam.preset] then steerCam.preset = "Default" end   -- (covers a saved "Custom")
   steerCam.applyCfg()
 
   -- Global mod on/off (independent of the preset; persists). When off, the camera
@@ -252,10 +201,29 @@ if not steerCam then
     save("steerCam_mirrorSeat", steerCam.mirrorSeat)
   end
 
+  -- Per-vehicle "notary" toggle (global). PLACEHOLDER: persisted so the choice is
+  -- remembered, but it does nothing yet -- wired up when the per-vehicle config
+  -- system lands. Default off.
+  steerCam.notaryEnabled = getBool("steerCam_notaryEnabled", false)
+  function steerCam.setNotary(v)
+    steerCam.notaryEnabled = (v == true or v == 1 or v == "true")
+    save("steerCam_notaryEnabled", steerCam.notaryEnabled)
+  end
+
+  -- UI: open the presets folder in the OS file browser (so users can find, share and
+  -- hand-edit their .json presets). Resolves to <userfolder>/settings/steercam/presets/.
+  function steerCam.openPresetFolder()
+    -- make sure it exists first (a user who hasn't saved a preset yet has no folder)
+    if FS and FS.directoryCreate then FS:directoryCreate(steerCam.presetsDir) end
+    if Engine and Engine.Platform and Engine.Platform.exploreFolder then
+      Engine.Platform.exploreFolder(steerCam.presetsDir)
+    end
+  end
+
   -- UI: switch the active base preset. Per-preset overrides are preserved, so a preset
   -- you'd tweaked still shows its changes when you return to it.
   function steerCam.setPreset(name)
-    if name ~= "Custom" and not steerCam.presets[name] then name = "Default" end
+    if not steerCam.presets[name] then name = "Default" end
     steerCam.preset = name
     steerCam.applyCfg()
     save("steerCam_preset", name)
@@ -345,9 +313,8 @@ if not steerCam then
     return { ok = true }
   end
 
-  -- UI: edit a value. On Custom it writes the profile directly (persisted as
-  -- steerCam_custom_*); on a file preset it writes the per-preset override layer
-  -- (Reset discards it, Save bakes it in). Either way steerCam.cfg is rebuilt.
+  -- UI: edit a value. Writes the selected preset's per-preset override layer (Reset
+  -- discards it, Save bakes it in), then rebuilds steerCam.cfg.
   function steerCam.set(key, value)
     if steerCam.defaults[key] == nil then return end   -- unknown key
     local v
@@ -361,15 +328,10 @@ if not steerCam then
       local r = ranges[key]
       if r then v = clampv(v, r[1], r[2]) end
     end
-    if steerCam.preset == "Custom" then
-      steerCam.custom[key] = v
-      save("steerCam_custom_" .. key, v)
-    else
-      local ov = steerCam.overrides[steerCam.preset] or {}
-      ov[key] = v
-      steerCam.overrides[steerCam.preset] = ov
-      saveOverrides()
-    end
+    local ov = steerCam.overrides[steerCam.preset] or {}
+    ov[key] = v
+    steerCam.overrides[steerCam.preset] = ov
+    saveOverrides()
     steerCam.applyCfg()
   end
 
@@ -377,12 +339,14 @@ if not steerCam then
   function steerCam.getCfg()
     local a = steerCam.cfg
     local ov = steerCam.overrides[steerCam.preset]
-    local modified = (steerCam.preset ~= "Custom") and ov ~= nil and next(ov) ~= nil
+    local modified = ov ~= nil and next(ov) ~= nil
     return {
       preset = steerCam.preset,
       modified = modified or false,
       modEnabled = steerCam.enabled,
       mirrorSeat = steerCam.mirrorSeat,
+      notaryEnabled = steerCam.notaryEnabled,
+      version = steerCam.version,
       camEnable = a.camEnable, camFwd = a.camFwd, camUp = a.camUp,
       camYaw = a.camYaw, camPitch = a.camPitch, camFov = a.camFov, stableHorizon = a.stableHorizon, nearClip = a.nearClip,
       steerEnable = a.steerEnable,
@@ -402,22 +366,20 @@ if not steerCam then
     }
   end
 
-  -- UI: the ordered preset list for the dropdown (Custom pinned last)
+  -- UI: the ordered preset list for the dropdown
   function steerCam.getPresetNames()
     local names = {}
     for _, n in ipairs(steerCam.presetOrder or {}) do names[#names + 1] = n end
-    names[#names + 1] = "Custom"
     return names
   end
 
   -- UI: ordered preset list WITH protection flags so the app can show a lock and
-  -- block overwrite/delete. Custom is pinned last and is never protected.
+  -- block overwrite/delete.
   function steerCam.getPresetMeta()
     local out = {}
     for _, n in ipairs(steerCam.presetOrder or {}) do
       out[#out + 1] = { name = n, protected = (steerCam.presetProtected and steerCam.presetProtected[n]) == true }
     end
-    out[#out + 1] = { name = "Custom", protected = false }
     return out
   end
 
