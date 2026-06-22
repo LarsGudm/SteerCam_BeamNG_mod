@@ -1,6 +1,7 @@
 {
   "name": "Default",
   "order": 0,
+  "protected": true,
 
   "camEnable": true,
   "camFwd": 0.0,

@@ -110,6 +110,7 @@ if not steerCam then
   steerCam.presetsDir = "/settings/steercam/presets/"
   function steerCam.loadPresets()
     local presets, meta, order = {}, {}, {}   -- name->cfg, name->sortKey, [names]
+    local protected, fileOf = {}, {}          -- name->bool, name->source file path
     local files = (FS and FS.findFiles) and FS:findFiles(steerCam.presetsDir, "*.json", 0, false, false) or {}
     for _, file in ipairs(files) do
       local raw = jsonReadFile(file)
@@ -122,14 +123,17 @@ if not steerCam then
         if name and name ~= "Custom" and not presets[name] then
           presets[name] = sanitizePreset(raw)
           meta[name]    = tonumber(raw.order) or 100
+          protected[name] = (raw.protected == true)   -- safe tag: blocks UI overwrite/delete
+          fileOf[name]  = file
           order[#order + 1] = name
         end
       end
     end
     -- Default always exists (synthesized from the inline table if no file loads)
-    -- and is always pinned to the top of the list.
+    -- and is always pinned to the top of the list. Synthesized = protected by default.
     if not presets["Default"] then
       presets["Default"] = sanitizePreset(steerCam.defaults)
+      protected["Default"] = true
       order[#order + 1] = "Default"
     end
     meta["Default"] = -math.huge
@@ -138,8 +142,10 @@ if not steerCam then
       if oa ~= ob then return oa < ob end
       return a < b
     end)
-    steerCam.presets     = presets
-    steerCam.presetOrder = order
+    steerCam.presets      = presets
+    steerCam.presetOrder  = order
+    steerCam.presetProtected = protected
+    steerCam.presetFiles  = fileOf
   end
   steerCam.loadPresets()
 
@@ -196,13 +202,37 @@ if not steerCam then
     if r and type(v) == "number" then steerCam.custom[k] = clampv(v, r[1], r[2]) end
   end
 
-  -- steerCam.cfg points at whichever profile is active (the camera reads this).
-  local function resolveCfg(name)
-    if name == "Custom" then return steerCam.custom end
-    return steerCam.presets[name] or steerCam.presets["Default"] or steerCam.defaults
+  -- Edit model: a selected base preset + a sparse per-preset OVERRIDE layer (your live
+  -- tweaks on top of it). "Custom" is the directly-editable scratch profile (its values
+  -- persist as steerCam_custom_*); every file preset is editable too, with tweaks kept
+  -- in steerCam.overrides[name] until you Reset (discard) or Save (bake into the file).
+  -- steerCam.cfg is the merged result the camera reads. Overrides persist as one blob.
+  steerCam.overrides = {}
+  do
+    local s = getStr("steerCam_overrides", "")
+    if s ~= "" then
+      local raw = jsonDecode(s)
+      if type(raw) == "table" then steerCam.overrides = raw end
+    end
   end
+  local function saveOverrides() save("steerCam_overrides", jsonEncode(steerCam.overrides)) end
+
+  -- (re)build steerCam.cfg = base preset merged with its overrides (or Custom direct)
+  function steerCam.applyCfg()
+    local name = steerCam.preset
+    if name == "Custom" then steerCam.cfg = steerCam.custom; return end
+    local base = steerCam.presets[name] or steerCam.presets["Default"] or steerCam.defaults
+    local ov = steerCam.overrides[name]
+    if not ov or next(ov) == nil then steerCam.cfg = base; return end   -- base stays read-only
+    local merged = {}
+    for k, v in pairs(base) do merged[k] = v end
+    for k, v in pairs(ov) do merged[k] = v end
+    steerCam.cfg = merged
+  end
+
   steerCam.preset = getStr("steerCam_preset", "Default")
-  steerCam.cfg = resolveCfg(steerCam.preset)
+  if steerCam.preset ~= "Custom" and not steerCam.presets[steerCam.preset] then steerCam.preset = "Default" end
+  steerCam.applyCfg()
 
   -- Global mod on/off (independent of the preset; persists). When off, the camera
   -- behaves like the stock driver cam -- every SteerCam effect below is skipped.
@@ -222,11 +252,12 @@ if not steerCam then
     save("steerCam_mirrorSeat", steerCam.mirrorSeat)
   end
 
-  -- UI: switch active profile (presets are file-defined; only Custom is editable)
+  -- UI: switch the active base preset. Per-preset overrides are preserved, so a preset
+  -- you'd tweaked still shows its changes when you return to it.
   function steerCam.setPreset(name)
     if name ~= "Custom" and not steerCam.presets[name] then name = "Default" end
     steerCam.preset = name
-    steerCam.cfg = resolveCfg(name)
+    steerCam.applyCfg()
     save("steerCam_preset", name)
   end
 
@@ -237,29 +268,119 @@ if not steerCam then
     steerCam.setPreset(steerCam.preset)
   end
 
-  -- UI: edit a Custom value (Default is never modified)
-  function steerCam.set(key, value)
-    local c = steerCam.custom
-    if c[key] == nil then return end
-    if bools[key] then
-      c[key] = (value == true or value == 1 or value == "true")
-    elseif strs[key] then
-      c[key] = tostring(value)
-    else
-      value = tonumber(value)
-      if value == nil then return end
-      local r = ranges[key]
-      if r then value = clampv(value, r[1], r[2]) end
-      c[key] = value
+  -- UI: save the current effective settings as a named preset (global -- available to
+  -- every car). New name -> new file; existing name -> overwrite in place (the UI
+  -- confirms first). Protected presets (Default/Dev's) and the reserved "Custom" name
+  -- are refused. User presets are written WITHOUT a protected tag, so they stay
+  -- editable (power users can add "protected": true to the JSON by hand). The display
+  -- name lives in the JSON's "name" field; the filename is just a slug.
+  function steerCam.savePreset(name)
+    name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then return { ok = false, reason = "empty" } end
+    if name == "Custom" then return { ok = false, reason = "reserved" } end
+    if steerCam.presetProtected and steerCam.presetProtected[name] then
+      return { ok = false, reason = "protected" }
     end
-    save("steerCam_custom_" .. key, c[key])
+    local file = steerCam.presetFiles and steerCam.presetFiles[name]   -- overwrite in place
+    if not file then
+      local slug = name:lower():gsub("%s+", "-"):gsub("[^a-z0-9%-_]", "")
+      if slug == "" then slug = "preset" end
+      file = steerCam.presetsDir .. slug .. ".json"
+      local n = 2                                                      -- avoid clobbering a same-slug file
+      while FS and FS.fileExists and FS:fileExists(file) do
+        file = steerCam.presetsDir .. slug .. "-" .. n .. ".json"; n = n + 1
+      end
+    end
+    local cfg = steerCam.getCfg()
+    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat = nil, nil, nil, nil   -- not preset data
+    cfg.name, cfg.order = name, 100
+    jsonWriteFile(file, cfg, true)
+    steerCam.loadPresets()
+    steerCam.setPreset(name)   -- select the new preset (clean, no overrides yet)
+    return { ok = true, name = name }
+  end
+
+  -- UI: delete a user preset file. Refuses protected presets and "Custom"; falls the
+  -- active selection back to Default if the deleted preset was selected.
+  function steerCam.deletePreset(name)
+    if not name or name == "Custom" then return { ok = false, reason = "reserved" } end
+    if steerCam.presetProtected and steerCam.presetProtected[name] then
+      return { ok = false, reason = "protected" }
+    end
+    local file = steerCam.presetFiles and steerCam.presetFiles[name]
+    if not file then return { ok = false, reason = "missing" } end
+    if FS and FS.removeFile then FS:removeFile(file) end
+    steerCam.overrides[name] = nil; saveOverrides()   -- drop any tweaks for the gone preset
+    steerCam.loadPresets()
+    if steerCam.preset == name then steerCam.setPreset("Default") else steerCam.applyCfg() end
+    return { ok = true }
+  end
+
+  -- UI: discard the current preset's overrides (Reset -- back to the saved preset). No
+  -- confirmation by design; harmless no-op on Custom (which has no base to revert to).
+  function steerCam.resetOverrides()
+    local name = steerCam.preset
+    if steerCam.overrides[name] ~= nil then
+      steerCam.overrides[name] = nil
+      saveOverrides()
+      steerCam.applyCfg()
+    end
+  end
+
+  -- UI: bake the current preset's overrides into its own file (Save changes to this
+  -- preset), then clear them. Refuses Custom and protected presets.
+  function steerCam.saveChanges()
+    local name = steerCam.preset
+    if name == "Custom" then return { ok = false, reason = "reserved" } end
+    if steerCam.presetProtected and steerCam.presetProtected[name] then return { ok = false, reason = "protected" } end
+    local file = steerCam.presetFiles and steerCam.presetFiles[name]
+    if not file then return { ok = false, reason = "missing" } end
+    local cfg = steerCam.getCfg()
+    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat = nil, nil, nil, nil
+    cfg.name, cfg.order = name, 100
+    jsonWriteFile(file, cfg, true)
+    steerCam.overrides[name] = nil; saveOverrides()
+    steerCam.loadPresets()
+    steerCam.setPreset(name)
+    return { ok = true }
+  end
+
+  -- UI: edit a value. On Custom it writes the profile directly (persisted as
+  -- steerCam_custom_*); on a file preset it writes the per-preset override layer
+  -- (Reset discards it, Save bakes it in). Either way steerCam.cfg is rebuilt.
+  function steerCam.set(key, value)
+    if steerCam.defaults[key] == nil then return end   -- unknown key
+    local v
+    if bools[key] then
+      v = (value == true or value == 1 or value == "true")
+    elseif strs[key] then
+      v = tostring(value)
+    else
+      v = tonumber(value)
+      if v == nil then return end
+      local r = ranges[key]
+      if r then v = clampv(v, r[1], r[2]) end
+    end
+    if steerCam.preset == "Custom" then
+      steerCam.custom[key] = v
+      save("steerCam_custom_" .. key, v)
+    else
+      local ov = steerCam.overrides[steerCam.preset] or {}
+      ov[key] = v
+      steerCam.overrides[steerCam.preset] = ov
+      saveOverrides()
+    end
+    steerCam.applyCfg()
   end
 
   -- UI: read the active profile's values + which preset is selected
   function steerCam.getCfg()
     local a = steerCam.cfg
+    local ov = steerCam.overrides[steerCam.preset]
+    local modified = (steerCam.preset ~= "Custom") and ov ~= nil and next(ov) ~= nil
     return {
       preset = steerCam.preset,
+      modified = modified or false,
       modEnabled = steerCam.enabled,
       mirrorSeat = steerCam.mirrorSeat,
       camEnable = a.camEnable, camFwd = a.camFwd, camUp = a.camUp,
@@ -287,6 +408,17 @@ if not steerCam then
     for _, n in ipairs(steerCam.presetOrder or {}) do names[#names + 1] = n end
     names[#names + 1] = "Custom"
     return names
+  end
+
+  -- UI: ordered preset list WITH protection flags so the app can show a lock and
+  -- block overwrite/delete. Custom is pinned last and is never protected.
+  function steerCam.getPresetMeta()
+    local out = {}
+    for _, n in ipairs(steerCam.presetOrder or {}) do
+      out[#out + 1] = { name = n, protected = (steerCam.presetProtected and steerCam.presetProtected[n]) == true }
+    end
+    out[#out + 1] = { name = "Custom", protected = false }
+    return out
   end
 
   -- ----- Blind-spot glance runtime ------------------------------------------

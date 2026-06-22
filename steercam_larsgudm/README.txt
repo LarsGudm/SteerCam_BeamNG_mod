@@ -37,20 +37,26 @@ Right angle + offset swap. Keybinds never flip -- the right glance still looks
 right, it just uses your left-side tuning. Turn it off to use your values as-is in
 every car.
 
-Profiles, picked from the "Presets" dropdown at the top:
+Profiles, picked from the "Presets" dropdown at the top. EVERY profile is editable:
+tweak any slider and the dropdown shows "(modified)". A "Reset" button discards
+those tweaks (back to the saved preset); in the Presets menu, "Save changes to this
+preset" bakes them into it, or "Save as new preset..." makes a new one. Each preset
+remembers its own tweaks, so switching back and forth keeps them.
 
-  Default       LOCKED (read-only) - a simple, conservative baseline.
+  Default       PROTECTED - a simple, conservative baseline. Editable (with a lock
+                in the menu); you can't overwrite or delete it, only Save as new.
 
-  Dev's Preset  LOCKED (read-only) - a tuned "immersion" set (steer fade,
-                reverse mirror, speed vertigo + roll, softer glance easing).
+  Dev's Preset  PROTECTED - a tuned "immersion" set (steer fade, reverse mirror,
+                speed vertigo + roll, softer glance easing). Same: edit + Save as new.
 
-  (more)        Any extra presets found on disk - see ADDING PRESETS below.
+  (more)        Any preset you make or drop on disk - see ADDING PRESETS below.
+                Your own presets can be edited, Saved over, or deleted (× in the menu,
+                with a confirm).
 
-  Custom        Your own profile. Pick it to unlock the controls and edit. Your
-                changes are saved separately, so you can switch presets and back
-                without losing them. It starts from the Default values.
+  Custom        A free scratch profile. Edits save straight to it (no "modified"
+                state); starts from the Default values.
 
-Controls (editable on Custom):
+Controls:
   Camera settings override      (section) seat position, aim + FOV override
   Forward Offset   -0.5..0.5 m  move the seat forward (+) or back (-)
   Vertical Offset  -0.5..0.5 m  move the seat up (+) or down (-)
@@ -179,12 +185,16 @@ cancels an active preview, so you can test the real binding right away.
 
 ADDING PRESETS
 --------------
-Presets are plain .json files. The mod ships Default + Dev's Preset; any other
-.json found in the presets folder shows up in the dropdown automatically (read-
-only, like the built-ins).
+Easiest way - from the app: tune the look (on Custom, or any profile), type a
+name in the box under the Presets dropdown and hit Save. It's written as a .json
+in your User Folder and is then available for every car. Saving onto an existing
+name of your own asks to overwrite; Delete (next to the dropdown) removes the
+selected one. Default and Dev's Preset are PROTECTED and can't be overwritten or
+deleted from the app (they show a lock).
 
-To add your own without unzipping the mod, create this folder in your BeamNG
-User Folder and drop a .json in it:
+By hand: presets are plain .json files. Any .json in the presets folder shows up
+in the dropdown automatically. To add one without unzipping the mod, drop it in
+your User Folder:
 
   settings/steercam/presets/mypreset.json
 
@@ -194,11 +204,14 @@ settings/steercam/presets/), rename it, and edit. Format:
   - "name"  : what shows in the dropdown (e.g. "Track day"). If omitted, the
               filename is used. Don't use "Custom" - that name is reserved.
   - "order" : optional number for sort position (lower = higher in the list).
+  - "protected" : optional. Set true to make a preset safe from the app's Save/
+              Delete (like Default and Dev's). Add it to your own files if you
+              want to guard them; leave it out and the app can overwrite/delete.
   - Any setting key you want to change (same names the panel uses). Keys you
     leave out fall back to Default; out-of-range numbers are clamped; unknown
     keys are ignored - so a partial file is perfectly fine.
 
-After adding/editing files, either reload the game UI (Ctrl+L) or run
+After editing files by hand, either reload the game UI (Ctrl+L) or run
   steerCam.reloadPresets()
 in the console (~) to re-scan without a restart.
 
@@ -218,4 +231,5 @@ IF SOMETHING'S OFF
   .../core/cameraModes/steercam.lua, Ctrl+L, reopen the menu.
 - "SteerCam Settings" missing from Add App: close/reopen the app list once;
   if still missing, Ctrl+L and check the console (~) for UI errors.
-- Can't move the sliders: you're on the Default profile (locked) - click Custom.
+- Tweaked a preset by accident: hit Reset (next to the dropdown) to discard the
+  changes, or Save as new preset to keep them under a new name.
