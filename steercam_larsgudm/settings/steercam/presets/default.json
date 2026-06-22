@@ -48,6 +48,8 @@
   "rollSource": "Steering",
   "vertInertia": false,
   "vertInertiaMax": 8.0,
+  "vertSquishMax": 8.0,
+  "vertInertiaSpeed": 4.0,
   "engineVibe": false,
   "vibeAmount": 0.2,
   "vibeRotAmount": 0.15,

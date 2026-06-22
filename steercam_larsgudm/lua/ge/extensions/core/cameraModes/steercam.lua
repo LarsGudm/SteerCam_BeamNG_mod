@@ -51,7 +51,7 @@ if not steerCam then
     glanceFastEnable = false, glanceFastTime = 60.0, glanceFastSpeed = 120.0,
     speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
     speedRoll = false, rollAngle = 5.0, speedRange = 160.0, rollSource = "Steering",
-    vertInertia = false, vertInertiaMax = 8.0,
+    vertInertia = false, vertInertiaMax = 8.0, vertSquishMax = 8.0, vertInertiaSpeed = 4.0,
     engineVibe = false, vibeAmount = 0.2, vibeRotAmount = 0.15,
     speedVibe = false, speedVibeAmount = 0.5, speedVibeSpeed = 200.0,
     straightenEnable = false, straightenSpeed = 120.0,
@@ -71,7 +71,8 @@ if not steerCam then
     glanceFastTime = {0, 1000}, glanceFastSpeed = {20, 400},
     glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5}, glanceOffsetBack = {-0.5, 0.5}, glanceBackRoll = {-15, 15},
     vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
-    vertInertiaMax = {0, 30}, vibeAmount = {0, 0.5}, vibeRotAmount = {0, 1},
+    vertInertiaMax = {0, 30}, vertSquishMax = {0, 30}, vertInertiaSpeed = {1, 4},
+    vibeAmount = {0, 0.5}, vibeRotAmount = {0, 1},
     speedVibeAmount = {0, 1}, speedVibeSpeed = {20, 400},
     straightenSpeed = {20, 400},
   }
@@ -190,32 +191,33 @@ if not steerCam then
   if not steerCam.presets[steerCam.preset] then steerCam.preset = "Default" end   -- (covers a saved "Custom")
   steerCam.applyCfg()
 
-  -- Global mod on/off (independent of the preset; persists). When off, the camera
-  -- behaves like the stock driver cam -- every SteerCam effect below is skipped.
-  steerCam.enabled = getBool("steerCam_enabled", true)
-  function steerCam.setEnabled(v)
-    steerCam.enabled = (v == true or v == 1 or v == "true")
-    save("steerCam_enabled", steerCam.enabled)
+  -- Global toggles (independent of presets). settings.setValue round-trips booleans
+  -- unreliably here -- they read back as a non-boolean, so getBool fell to the default
+  -- and the choice never "stuck". Persist them to a small JSON file instead, the same
+  -- proven path the presets use; JSON keeps real true/false.
+  local globalsFile = "/settings/steercam/globals.json"
+  local gFile = (FS and FS.fileExists and FS:fileExists(globalsFile)) and jsonReadFile(globalsFile) or {}
+  local function gbool(v, d) if type(v) == "boolean" then return v end return d end
+  local function saveGlobals()
+    if FS and FS.directoryCreate then FS:directoryCreate("/settings/steercam/") end
+    jsonWriteFile(globalsFile, { enabled = steerCam.enabled, mirrorSeat = steerCam.mirrorSeat,
+      notaryEnabled = steerCam.notaryEnabled }, true)
   end
 
-  -- Driver-seat mirroring (global, default on). Saved values describe a LEFT-hand-
-  -- drive seat (the ground truth, since most cars are LHD). In a right-hand-drive
-  -- car we auto-flip the side-specific settings (camera pan + glance L/R) so the
-  -- feel is symmetric about the driver -- the input direction is never flipped.
-  steerCam.mirrorSeat = getBool("steerCam_mirrorSeat", true)
-  function steerCam.setMirror(v)
-    steerCam.mirrorSeat = (v == true or v == 1 or v == "true")
-    save("steerCam_mirrorSeat", steerCam.mirrorSeat)
-  end
+  -- Global mod on/off. When off, the camera behaves like the stock driver cam.
+  steerCam.enabled = gbool(gFile.enabled, true)
+  function steerCam.setEnabled(v) steerCam.enabled = (v == true or v == 1 or v == "true"); saveGlobals() end
 
-  -- Per-vehicle "notary" toggle (global). PLACEHOLDER: persisted so the choice is
-  -- remembered, but it does nothing yet -- wired up when the per-vehicle config
-  -- system lands. Default off.
-  steerCam.notaryEnabled = getBool("steerCam_notaryEnabled", false)
-  function steerCam.setNotary(v)
-    steerCam.notaryEnabled = (v == true or v == 1 or v == "true")
-    save("steerCam_notaryEnabled", steerCam.notaryEnabled)
-  end
+  -- Driver-seat mirroring (default on). Saved values describe a LEFT-hand-drive seat
+  -- (most cars are LHD); in a right-hand-drive car we auto-flip the side-specific
+  -- settings (camera pan + glance L/R) so the feel is symmetric -- input is never flipped.
+  steerCam.mirrorSeat = gbool(gFile.mirrorSeat, true)
+  function steerCam.setMirror(v) steerCam.mirrorSeat = (v == true or v == 1 or v == "true"); saveGlobals() end
+
+  -- Per-vehicle "notary" toggle. PLACEHOLDER: remembered but does nothing yet -- wired
+  -- up when the per-vehicle config system lands. Default off.
+  steerCam.notaryEnabled = gbool(gFile.notaryEnabled, false)
+  function steerCam.setNotary(v) steerCam.notaryEnabled = (v == true or v == 1 or v == "true"); saveGlobals() end
 
   -- UI: open the presets folder in the OS file browser (so users can find, share and
   -- hand-edit their .json presets). Resolves to <userfolder>/settings/steercam/presets/.
@@ -942,9 +944,19 @@ return function(...)
     -- moves like a head on a neck. Applied along the car's up axis, on top of camUp.
     local vTarget = 0
     if modsOn and c.vertInertia then
-      vTarget = clampUnit(-self.vertAccLP / GFULL) * ((c.vertInertiaMax or 0) * 0.01)
+      -- felt vertical g (signed): + = floating UP off the seat (car dropping / going light;
+      -- airborne free-fall is weightless -> a sustained +1 here, hence full lift while in the
+      -- air), - = pressed DOWN under compression. Full travel at 1 g (free-fall weightlessness
+      -- is exactly that), which is the natural reference -- so it's fixed, not a setting. Up
+      -- and down get their own max so they can differ.
+      local g = clampUnit(-self.vertAccLP / GFULL)
+      local maxCm = (g >= 0) and (c.vertInertiaMax or 0) or (c.vertSquishMax or 0)
+      vTarget = g * (maxCm * 0.01)
     end
-    self.vertOff = self.vertOff + (vTarget - self.vertOff) * clamp01(dt * 9)
+    -- spring the head toward the target; vertInertiaSpeed sets how fast. LOW = floaty and
+    -- gradual (a brief moment of air only lifts partway; the longer you fall the higher it
+    -- climbs toward max), HIGH = snaps to the target almost instantly.
+    self.vertOff = self.vertOff + (vTarget - self.vertOff) * clamp01(dt * (c.vertInertiaSpeed or 9))
     if self.vertOff ~= 0 and data.veh ~= nil then
       gUp:set(data.veh:getDirectionVectorUp())
       gUp:setScaled(self.vertOff)
