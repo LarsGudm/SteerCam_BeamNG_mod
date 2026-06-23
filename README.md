@@ -41,6 +41,5 @@ based on steer input, but the project has grown a lot in scope since that initia
 ## Credits
 Vibe coded by: **LarsGudm**, using Claude Opus 4.8.
 
-## Notes by the author ##
 Being that this project is written with AI, it has alot of detailed commentary throughout the code. Have a read through
 if you want to learn how anything works! 
