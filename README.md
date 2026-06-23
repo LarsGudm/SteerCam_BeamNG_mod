@@ -1,6 +1,6 @@
 # Steer Cam
 
-A completely customizable driver camera mod for **BeamNG.drive**. 
+A completely customizable driver camera mod for BeamNG.drive with steering input to pan cockpit view.
 
 ## Main Features
 - **Fully customizable**: Tweak EVERYTHING!* From basic tweaks like camera position, tilt and pan within the cockpit,
@@ -24,7 +24,7 @@ _*not actually everything... but pretty close!_
 The name SteerCam comes from the first feature I implemented which is effectively just panning the camera
 based on steer input, but the project has grown a lot in scope since that initial version.
 
-## Install (for players)
+## Installation
 **Option A:** Install via ingame repository browser (Recommended). Search for "SteerCam" made by the user "LarsGudm"
 
 **Option B:** Manual installation:

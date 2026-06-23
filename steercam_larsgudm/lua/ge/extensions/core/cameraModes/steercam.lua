@@ -119,7 +119,7 @@ if not steerCam then
   steerCam.presetsDir = "/settings/steercam/presets/"
   function steerCam.loadPresets()
     local presets, meta, order = {}, {}, {}   -- name->cfg, name->sortKey, [names]
-    local protected, fileOf = {}, {}          -- name->bool, name->source file path
+    local protected, fileOf, orderRaw = {}, {}, {}   -- name->bool, name->file, name->literal order
     local files = (FS and FS.findFiles) and FS:findFiles(steerCam.presetsDir, "*.json", 0, false, false) or {}
     for _, file in ipairs(files) do
       local raw = jsonReadFile(file)
@@ -133,6 +133,7 @@ if not steerCam then
           presets[name] = sanitizePreset(raw)
           meta[name]    = tonumber(raw.order) or 100
           protected[name] = (raw.protected == true)   -- safe tag: blocks UI overwrite/delete
+          orderRaw[name] = raw.order                  -- literal value, so re-save keeps a hand-set order
           fileOf[name]  = file
           order[#order + 1] = name
         end
@@ -154,6 +155,7 @@ if not steerCam then
     steerCam.presets      = presets
     steerCam.presetOrder  = order
     steerCam.presetProtected = protected
+    steerCam.presetOrderRaw  = orderRaw
     steerCam.presetFiles  = fileOf
   end
   steerCam.loadPresets()
@@ -343,6 +345,42 @@ if not steerCam then
     steerCam.setPreset(steerCam.preset)
   end
 
+  -- Write a preset file with keys in PANEL order (name first), instead of jsonWriteFile's
+  -- alphabetical sort -- so a hand-edited preset reads top-to-bottom like the app. Unknown
+  -- keys (e.g. a future setting) are appended so nothing is ever dropped.
+  local presetKeyOrder = {
+    "camEnable", "camFwd", "camUp", "camYaw", "camPitch", "stableHorizon", "camFov", "nearClip",
+    "steerEnable", "angle", "reach", "stiffness", "reverseSteer", "reverseAngle", "reverseTime", "speedFade", "fadeSpeed", "fadeFloor",
+    "glanceEnable", "glanceLeft", "glanceOffsetLeft", "glanceRight", "glanceOffsetRight", "glanceBack", "glanceOffsetBack", "glanceBackRoll",
+    "glanceTransition", "glanceTime", "glanceCurve", "glanceFastEnable", "glanceFastTime", "glanceFastSpeed",
+    "speedModEnable", "vertigo", "vertigoFov", "vertigoDolly", "speedRoll", "rollAngle", "rollSource", "speedRange",
+    "vertInertia", "vertInertiaMax", "vertSquishMax", "vertInertiaSpeed", "speedVibe", "speedVibeAmount", "speedVibeSpeed",
+    "engineVibe", "vibeAmount", "vibeRotAmount", "straightenEnable", "straightenSpeed",
+  }
+  local function encVal(v)
+    local t = type(v)
+    if t == "boolean" then return v and "true" or "false" end
+    if t == "number" then return tostring(v) end   -- LuaJIT prints these cleanly (0.1, 2.5, 65)
+    return jsonEncode(v)                            -- strings: proper quoting/escaping
+  end
+  local function writePresetFile(file, cfg)
+    local seen, lines = {}, {}
+    local function emit(k)
+      if cfg[k] ~= nil and not seen[k] then
+        seen[k] = true
+        lines[#lines + 1] = "  " .. jsonEncode(k) .. ": " .. encVal(cfg[k])
+      end
+    end
+    emit("name"); emit("order"); emit("protected")     -- header block, above all settings
+    for _, k in ipairs(presetKeyOrder) do emit(k) end  -- settings, in panel order
+    emit("version")                                    -- metadata last
+    local rest = {}                                    -- never drop an unrecognised key
+    for k in pairs(cfg) do if not seen[k] then rest[#rest + 1] = k end end
+    table.sort(rest)
+    for _, k in ipairs(rest) do emit(k) end
+    writeFile(file, "{\n" .. table.concat(lines, ",\n") .. "\n}\n")
+  end
+
   -- UI: save the current effective settings as a named preset (global -- available to
   -- every car). New name -> new file; existing name -> overwrite in place (the UI
   -- confirms first). Protected presets (Default/Dev's) and the reserved "Custom" name
@@ -367,9 +405,11 @@ if not steerCam then
       end
     end
     local cfg = steerCam.getCfg()
-    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat = nil, nil, nil, nil   -- not preset data
-    cfg.name, cfg.order = name, 100
-    jsonWriteFile(file, cfg, true)
+    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat, cfg.notaryEnabled = nil, nil, nil, nil, nil   -- not preset data
+    -- new presets: order empty (-> sorts at the default 100, keeping today's order) and
+    -- unprotected. Overwriting an existing one keeps its hand-set order.
+    cfg.name, cfg.order, cfg.protected = name, (steerCam.presetOrderRaw and steerCam.presetOrderRaw[name]) or "", false
+    writePresetFile(file, cfg)
     steerCam.loadPresets()
     steerCam.setPreset(name)   -- select the new preset (clean, no overrides yet)
     return { ok = true, name = name }
@@ -412,9 +452,9 @@ if not steerCam then
     local file = steerCam.presetFiles and steerCam.presetFiles[name]
     if not file then return { ok = false, reason = "missing" } end
     local cfg = steerCam.getCfg()
-    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat = nil, nil, nil, nil
-    cfg.name, cfg.order = name, 100
-    jsonWriteFile(file, cfg, true)
+    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat, cfg.notaryEnabled = nil, nil, nil, nil, nil
+    cfg.name, cfg.order, cfg.protected = name, (steerCam.presetOrderRaw and steerCam.presetOrderRaw[name]) or "", false
+    writePresetFile(file, cfg)
     steerCam.overrides[name] = nil; saveOverrides()
     steerCam.loadPresets()
     steerCam.setPreset(name)
