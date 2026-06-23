@@ -2,7 +2,7 @@
   "name": "Steer Cam Settings",
   "author": "LarsGudm",
   "version": "1.0",
-  "description": "Adjust SteerCam: the driver camera that turns toward where your wheels point.",
+  "description": "A comprehensive and fully customizable driver camera mod.",
   "directive": "steerCam",
   "domElement": "<steer-cam></steer-cam>",
   "css": {

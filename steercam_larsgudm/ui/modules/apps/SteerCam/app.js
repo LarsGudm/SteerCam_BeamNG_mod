@@ -318,7 +318,7 @@ angular.module('beamng.apps')
             '<b>{{cfg.vertInertiaSpeed | number:1}}</b></div>',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedVibe" ng-change="set(\'speedVibe\', cfg.speedVibe)" ng-disabled="locked"> Speed vibration<span class="sc-tipsrc" ng-if="tips.speedVibe">{{tips.speedVibe}}</span><span class="sc-info" ng-if="tips.speedVibe">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedVibe}"><span>Rumble amount<span class="sc-tipsrc" ng-if="tips.speedVibeAmount">{{tips.speedVibeAmount}}</span><span class="sc-info" ng-if="tips.speedVibeAmount">&#9432;</span></span>',
-            '<input type="range" min="0" max="1" step="0.01" ng-model="cfg.speedVibeAmount" ng-change="set(\'speedVibeAmount\', cfg.speedVibeAmount)" ng-disabled="locked || !cfg.speedVibe">',
+            '<input type="range" min="0" max="2" step="0.01" ng-model="cfg.speedVibeAmount" ng-change="set(\'speedVibeAmount\', cfg.speedVibeAmount)" ng-disabled="locked || !cfg.speedVibe">',
             '<b>{{cfg.speedVibeAmount | number:2}}mm</b></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedVibe}"><span>Rumble speed<span class="sc-tipsrc" ng-if="tips.speedVibeSpeed">{{tips.speedVibeSpeed}}</span><span class="sc-info" ng-if="tips.speedVibeSpeed">&#9432;</span></span>',
             '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedVibeSpeed" ng-change="set(\'speedVibeSpeed\', cfg.speedVibeSpeed)" ng-disabled="locked || !cfg.speedVibe">',
@@ -352,8 +352,8 @@ angular.module('beamng.apps')
             '<div class="sc-settings-hd"><span>Settings</span><span class="sc-settings-x" ng-click="closeSettings()" title="Close">&#215;</span></div>',
             '<label class="sc-set-chk"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Mirror settings on right-hand-drive cars<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span><span class="sc-info" ng-if="tips.mirror">&#9432;</span></label>',
             '<label class="sc-set-chk"><input type="checkbox" ng-model="notaryEnabled" ng-change="setNotary(notaryEnabled)"> Per-vehicle configs<span class="sc-tipsrc" ng-if="tips.notary">{{tips.notary}}</span><span class="sc-info" ng-if="tips.notary">&#9432;</span></label>',
-            '<div class="sc-set-note">Remembers a separate config per vehicle. Coming soon — the toggle is saved for when it lands.</div>',
-            '<div class="sc-set-ver">SteerCam v{{version}} &middot; by LarsGudm</div>',
+            '<div class="sc-set-note" ng-if="notaryEnabled && vehKey">jbeam: <b style="color:#cfcfd4">{{vehKey}}</b></div>',
+            '<div class="sc-set-ver">SteerCam v{{version}}<br>Vibe coded by LarsGudm, with Claude Opus 4.8</div>',
           '</div>',
         '</div>',
       '</div>'
@@ -372,7 +372,8 @@ angular.module('beamng.apps')
       scope.glanceSide = 'none';
       scope.modEnabled = true;   // global mod on/off (independent of preset lock)
       scope.mirrorSeat = true;   // global: mirror side-specific settings on RHD cars
-      scope.notaryEnabled = false;   // per-vehicle configs (placeholder; not active yet)
+      scope.notaryEnabled = false;   // per-vehicle configs: each car remembers its own preset+tweaks
+      scope.vehKey = '';             // current vehicle's jbeam name (shown in Settings when notary on)
       scope.settingsOpen = false;    // the Settings overlay
       scope.version = '1.0';         // shown in Settings; replaced by the Lua value on load
       // Hover hints (shown in the bottom hint bar). Add text to give a category/
@@ -381,7 +382,7 @@ angular.module('beamng.apps')
       scope.tips = {
         modEnable: '',
         mirror: 'Settings describe a left-hand-drive seat. In right-hand-drive cars; camera pan, glance angle, etc. auto-mirror so it feels the same.',
-        notary: 'When on, each vehicle remembers its own SteerCam config automatically. Not active yet — the toggle is saved for when the feature ships.',
+        notary: 'Each vehicle remembers its own preset + tweaks. A new car starts from the last preset you picked.',
         cam: '',
         steer: 'Turns the view camera view based on steering input',
         glance: 'Snap the view to different angles. Bind keys in Options > Controls > Camera',
@@ -581,6 +582,24 @@ angular.module('beamng.apps')
         });
       }
 
+      // Car notary poll: cheap signature of the current car + preset + modified flag. When
+      // the notary is on and it changes (e.g. you switched vehicles), reload the panel so it
+      // shows that car's config. Also keeps the current car name (vehKey) for Settings.
+      var notarySig = null;
+      function syncNotary() {
+        bngApi.engineLua('steerCam and steerCam.getNotarySig() or nil', function (st) {
+          if (!st || typeof st !== 'object') { return; }
+          scope.$applyAsync(function () { scope.vehKey = st.veh || ''; });
+          if (st.notaryOn) {
+            // signature = car + its preset (NOT modified — that flips while you tweak)
+            var sig = (st.veh || '') + '|' + (st.preset || '');
+            if (sig !== notarySig) { notarySig = sig; load(); }
+          } else {
+            notarySig = null;
+          }
+        });
+      }
+
       // pull the file-scanned preset list (bundled + user-dropped .json files)
       function loadPresetNames() {
         // getPresetMeta returns [{name, protected}, ...]; derive the name list + a
@@ -623,9 +642,8 @@ angular.module('beamng.apps')
               if (typeof cfg.mirrorSeat === 'boolean') { scope.mirrorSeat = cfg.mirrorSeat; }
               if (typeof cfg.notaryEnabled === 'boolean') { scope.notaryEnabled = cfg.notaryEnabled; }
               if (cfg.version) { scope.version = cfg.version; }
-              // collapse state is independent of enable state; every section starts
-              // open so toggling a section off never hides its settings.
-              scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
+              // (collapse state is left alone here so it persists across reloads/preset
+              //  + car switches; it's initialised all-open where scope.collapsed is declared)
             });
           }
         });
@@ -844,7 +862,12 @@ angular.module('beamng.apps')
       // poll the glance preview state so the Preview buttons un-highlight when a
       // glance keybind cancels the preview (Lua clears it; the UI can't know otherwise)
       var glancePoll = setInterval(syncGlance, 200);
-      scope.$on('$destroy', function () { clearInterval(glancePoll); });
+      // poll the car notary so the panel follows vehicle switches (per-car configs)
+      var notaryPoll = setInterval(syncNotary, 400);
+      scope.$on('$destroy', function () {
+        clearInterval(glancePoll); clearInterval(notaryPoll);
+        bngApi.engineLua('if steerCam then steerCam.flushNotary() end');   // commit the last tweak on close
+      });
 
       // Clip the disabled grey overlay so it shows ONLY the part past the cap (the grey
       // head + fill beyond the limit). Hidden entirely when under the cap. Set directly on

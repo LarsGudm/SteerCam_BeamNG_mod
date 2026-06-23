@@ -191,6 +191,41 @@ if not steerCam then
   if not steerCam.presets[steerCam.preset] then steerCam.preset = "Default" end   -- (covers a saved "Custom")
   steerCam.applyCfg()
 
+  -- ===== Car notary: per-vehicle preset + overrides =================================
+  -- One JSON: { lastPreset = "<last preset you picked>", cars = { ["<jbeam>"]={preset,overrides} } }.
+  -- A car you've driven keeps its OWN entry (precedence); a brand-new car is seeded from
+  -- lastPreset, clean. Only active when notaryEnabled; off = today's global behaviour.
+  steerCam.notaryFile = "/settings/steercam/notary.json"
+  steerCam.notary = { cars = {} }
+  do
+    local raw = (FS and FS.fileExists and FS:fileExists(steerCam.notaryFile)) and jsonReadFile(steerCam.notaryFile) or nil
+    if type(raw) == "table" then
+      if type(raw.cars) == "table" then steerCam.notary.cars = raw.cars end
+      steerCam.notary.lastPreset = raw.lastPreset
+    end
+  end
+  -- the global "last picked preset" seeds new cars; default to the current selection
+  steerCam.lastPreset = (steerCam.notary.lastPreset and steerCam.presets[steerCam.notary.lastPreset] and steerCam.notary.lastPreset) or steerCam.preset
+  steerCam._activeVehKey = nil   -- which car the active state currently belongs to
+
+  local function currentVehKey(veh)
+    if veh == nil then veh = be and be.getPlayerVehicle and be:getPlayerVehicle(0) end
+    if veh and veh.getJBeamFilename then local k = veh:getJBeamFilename(); if k and k ~= "" then return k end end
+    return nil
+  end
+  local function saveNotaryNow()
+    if FS and FS.directoryCreate then FS:directoryCreate("/settings/steercam/") end
+    jsonWriteFile(steerCam.notaryFile, { lastPreset = steerCam.lastPreset, cars = steerCam.notary.cars }, true)
+    steerCam._notaryDirty = false
+  end
+  local function markNotaryDirty() steerCam._notaryDirty = true end
+  -- write pending changes to disk. Live tweaks update memory instantly (markNotaryDirty);
+  -- the actual write is driven by the UI poll (~throttled) + car switches, never per frame.
+  local function flushNotary()
+    if steerCam._notaryDirty then saveNotaryNow() end
+  end
+  steerCam.flushNotary = flushNotary   -- the UI calls this on close to commit the last tweak
+
   -- Global toggles (independent of presets). settings.setValue round-trips booleans
   -- unreliably here -- they read back as a non-boolean, so getBool fell to the default
   -- and the choice never "stuck". Persist them to a small JSON file instead, the same
@@ -214,10 +249,69 @@ if not steerCam then
   steerCam.mirrorSeat = gbool(gFile.mirrorSeat, true)
   function steerCam.setMirror(v) steerCam.mirrorSeat = (v == true or v == 1 or v == "true"); saveGlobals() end
 
-  -- Per-vehicle "notary" toggle. PLACEHOLDER: remembered but does nothing yet -- wired
-  -- up when the per-vehicle config system lands. Default off.
+  -- Per-vehicle "notary" toggle. ON = each car remembers its own preset+overrides.
+  -- Toggling never changes what's on screen, only where it's saved from/to: enabling
+  -- adopts the CURRENT config as this car's entry (so tweaks aren't wiped); disabling
+  -- keeps the current config and writes it back as the global state.
   steerCam.notaryEnabled = gbool(gFile.notaryEnabled, false)
-  function steerCam.setNotary(v) steerCam.notaryEnabled = (v == true or v == 1 or v == "true"); saveGlobals() end
+  function steerCam.setNotary(v)
+    local on = (v == true or v == 1 or v == "true")
+    if on and not steerCam.notaryEnabled then
+      local key = currentVehKey()
+      if key then
+        steerCam.notary.cars[key] = { preset = steerCam.preset, overrides = steerCam.overrides[steerCam.preset] or {} }
+        steerCam.lastPreset = steerCam.preset
+        steerCam._activeVehKey = key
+        saveNotaryNow()
+      end
+    elseif (not on) and steerCam.notaryEnabled then
+      save("steerCam_preset", steerCam.preset); saveOverrides()
+      steerCam._activeVehKey = nil
+    end
+    steerCam.notaryEnabled = on
+    saveGlobals()
+  end
+
+  -- Notary core: make the current vehicle's entry the active state. Loads that car's
+  -- {preset, overrides}, or seeds a brand-new car from lastPreset (clean). No-op when the
+  -- notary is off or the car hasn't changed. Called at EVERY entry point (update, set,
+  -- setPreset, reset, getCfg) so the config is always right for the current car, whatever
+  -- camera is active or wherever the change came from.
+  function steerCam.ensureVehLoaded(veh)
+    if not steerCam.notaryEnabled then return end
+    local key = currentVehKey(veh)
+    if not key or key == steerCam._activeVehKey then return end
+    flushNotary()                          -- commit the car we're leaving
+    steerCam._activeVehKey = key
+    local entry = steerCam.notary.cars[key]
+    if entry == nil then                   -- brand-new car: seed clean from lastPreset
+      local p = (steerCam.lastPreset and steerCam.presets[steerCam.lastPreset] and steerCam.lastPreset) or "Default"
+      entry = { preset = p, overrides = {} }
+      steerCam.notary.cars[key] = entry
+      saveNotaryNow()
+    end
+    steerCam.preset = (steerCam.presets[entry.preset] and entry.preset) or "Default"
+    steerCam.overrides = {}
+    if type(entry.overrides) == "table" and next(entry.overrides) ~= nil then
+      local ov = {}; for k, v in pairs(entry.overrides) do ov[k] = v end
+      steerCam.overrides[steerCam.preset] = ov
+    end
+    steerCam.applyCfg()
+  end
+
+  -- Persist the active preset+overrides to the right place: the current car's notary
+  -- entry (debounced) when the notary is on, otherwise the global blobs (today's path).
+  local function persistActive()
+    if steerCam.notaryEnabled and steerCam._activeVehKey then
+      steerCam.notary.cars[steerCam._activeVehKey] = {
+        preset = steerCam.preset, overrides = steerCam.overrides[steerCam.preset] or {},
+      }
+      steerCam.notary.lastPreset = steerCam.lastPreset
+      markNotaryDirty()
+    else
+      save("steerCam_preset", steerCam.preset); saveOverrides()
+    end
+  end
 
   -- UI: open the presets folder in the OS file browser (so users can find, share and
   -- hand-edit their .json presets). Resolves to <userfolder>/settings/steercam/presets/.
@@ -229,13 +323,17 @@ if not steerCam then
     end
   end
 
-  -- UI: switch the active base preset. Per-preset overrides are preserved, so a preset
-  -- you'd tweaked still shows its changes when you return to it.
+  -- UI: switch the active base preset. Updates the global lastPreset (it's an explicit
+  -- pick). Notary off: per-preset overrides are preserved (return to a preset, see its
+  -- tweaks). Notary on: the picked preset is this car's new selection, starting clean.
   function steerCam.setPreset(name)
+    steerCam.ensureVehLoaded()
     if not steerCam.presets[name] then name = "Default" end
     steerCam.preset = name
+    steerCam.lastPreset = name
+    if steerCam.notaryEnabled then steerCam.overrides = {} end   -- fresh preset on this car
     steerCam.applyCfg()
-    save("steerCam_preset", name)
+    persistActive()
   end
 
   -- Re-scan the presets folder at runtime (console: steerCam.reloadPresets()).
@@ -296,10 +394,11 @@ if not steerCam then
   -- UI: discard the current preset's overrides (Reset -- back to the saved preset). No
   -- confirmation by design; harmless no-op on Custom (which has no base to revert to).
   function steerCam.resetOverrides()
+    steerCam.ensureVehLoaded()
     local name = steerCam.preset
     if steerCam.overrides[name] ~= nil then
       steerCam.overrides[name] = nil
-      saveOverrides()
+      persistActive()
       steerCam.applyCfg()
     end
   end
@@ -326,6 +425,7 @@ if not steerCam then
   -- discards it, Save bakes it in), then rebuilds steerCam.cfg.
   function steerCam.set(key, value)
     if steerCam.defaults[key] == nil then return end   -- unknown key
+    steerCam.ensureVehLoaded()
     local v
     if bools[key] then
       v = (value == true or value == 1 or value == "true")
@@ -340,7 +440,7 @@ if not steerCam then
     local ov = steerCam.overrides[steerCam.preset] or {}
     ov[key] = v
     steerCam.overrides[steerCam.preset] = ov
-    saveOverrides()
+    persistActive()
     steerCam.applyCfg()
   end
 
@@ -349,6 +449,7 @@ if not steerCam then
   -- with no edit (forward-compatible -- just add it to steerCam.defaults). The extra
   -- non-preset fields (preset/modified/version/etc.) are added explicitly after.
   function steerCam.getCfg()
+    steerCam.ensureVehLoaded()
     local a = steerCam.cfg
     local ov = steerCam.overrides[steerCam.preset]
     local out = {}
@@ -360,6 +461,21 @@ if not steerCam then
     out.notaryEnabled = steerCam.notaryEnabled
     out.version = steerCam.version
     return out
+  end
+
+  -- UI poll: a tiny signature so the app can detect a car/preset/modified change (e.g.
+  -- you switched vehicles) and reload. Also drives the notary load via ensureVehLoaded,
+  -- and carries the current car's jbeam name to show in Settings.
+  function steerCam.getNotarySig()
+    steerCam.ensureVehLoaded()
+    flushNotary()   -- the UI poll drives the throttled save even outside the SteerCam cam
+    local ov = steerCam.overrides[steerCam.preset]
+    return {
+      veh = steerCam._activeVehKey or "",
+      preset = steerCam.preset or "",
+      modified = (ov ~= nil and next(ov) ~= nil) or false,
+      notaryOn = steerCam.notaryEnabled == true,
+    }
   end
 
   -- UI: the ordered preset list for the dropdown
@@ -619,6 +735,10 @@ return function(...)
 
     -- Mod globally disabled -> leave the stock driver result untouched.
     if not steerCam.enabled then return end
+
+    -- Car notary: swap to this vehicle's config if it changed (no-op when off / unchanged).
+    -- Done before reading cfg so this frame uses it. (Saves are driven by the UI, not here.)
+    steerCam.ensureVehLoaded(data.veh)
 
     local c = steerCam.cfg
     local dt = data.dt
