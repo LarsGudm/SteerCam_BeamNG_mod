@@ -46,13 +46,15 @@
   "vertInertiaMax": 4,
   "vertSquishMax": 2.5,
   "vertInertiaSpeed": 1,
-  "speedVibe": true,
-  "speedVibeAmount": 0.6,
-  "speedVibeSpeed": 300,
+  "speedRumble": true,
+  "speedRumbleDistance": 0.6,
+  "speedRumbleSpeed": 300,
   "engineVibe": true,
   "vibeAmount": 0.04,
   "vibeRotAmount": 0.02,
-  "straightenEnable": true,
-  "straightenSpeed": 115,
-  "version": "1.0"
+  "velAim": false,
+  "velAimInfluence": 40,
+  "velAimAnticipate": 200,
+  "velAimRampSpeed": 60,
+  "version": "1.1"
 }

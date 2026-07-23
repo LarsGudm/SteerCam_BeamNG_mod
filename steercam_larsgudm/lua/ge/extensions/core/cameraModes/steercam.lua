@@ -16,7 +16,8 @@
 
 if not steerCam then
   steerCam = {}
-  steerCam.version = "1.0"   -- shown in the Settings overlay; bump on release (keep app.json in sync)
+  steerCam.version = "1.1"   -- shown in the Settings overlay; bump on release (keep app.json in sync)
+  steerCam.vibeStopScale = 0.25   -- engine shut-OFF buzz amplitude as a fraction of the start; the UI tooltip reads this via getCfg
 
   local function getNum(k, d)
     local v = settings and settings.getValue and settings.getValue(k)
@@ -43,7 +44,7 @@ if not steerCam then
   -- Custom profile. The shipped default.json mirrors this for the dropdown entry.
   steerCam.defaults = {
     camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0, nearClip = 0.05,
-    steerEnable = true, angle = 18.0, reach = 65.0, stiffness = 15.0,
+    steerEnable = true, angle = 18.0, reach = 100.0, stiffness = 15.0,
     reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0, fadeFloor = 0.0,
     glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceBack = 0.0, glanceTime = 120.0,
     glanceOffsetLeft = 0.10, glanceOffsetRight = 0.10, glanceOffsetBack = 0.0, glanceBackRoll = 0.0,
@@ -53,8 +54,8 @@ if not steerCam then
     speedRoll = false, rollAngle = 5.0, speedRange = 160.0, rollSource = "Steering",
     vertInertia = false, vertInertiaMax = 8.0, vertSquishMax = 8.0, vertInertiaSpeed = 4.0,
     engineVibe = false, vibeAmount = 0.2, vibeRotAmount = 0.15,
-    speedVibe = false, speedVibeAmount = 0.5, speedVibeSpeed = 200.0,
-    straightenEnable = false, straightenSpeed = 120.0,
+    speedRumble = false, speedRumbleDistance = 0.5, speedRumbleSpeed = 200.0,
+    velAim = false, velAimInfluence = 40, velAimAnticipate = 200.0, velAimRampSpeed = 60.0,
   }
 
   -- Setting metadata: numeric ranges (clamped), booleans, and string-valued keys.
@@ -73,16 +74,20 @@ if not steerCam then
     vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
     vertInertiaMax = {0, 30}, vertSquishMax = {0, 30}, vertInertiaSpeed = {1, 4},
     vibeAmount = {0, 0.5}, vibeRotAmount = {0, 1},
-    speedVibeAmount = {0, 1}, speedVibeSpeed = {20, 400},
-    straightenSpeed = {20, 400},
+    speedRumbleDistance = {0, 2}, speedRumbleSpeed = {20, 400},
+    velAimInfluence = {0, 100}, velAimAnticipate = {0, 1000}, velAimRampSpeed = {20, 400},
   }
   local bools  = {
     speedFade = true, vertigo = true, speedRoll = true,
     camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
-    reverseSteer = true, vertInertia = true, engineVibe = true, straightenEnable = true,
-    speedVibe = true, glanceFastEnable = true,
+    reverseSteer = true, vertInertia = true, engineVibe = true,
+    speedRumble = true, glanceFastEnable = true, velAim = true,
   }
   local strs = { glanceCurve = true, glanceTransition = true, rollSource = true }   -- string-valued settings
+  -- Toggles whose change should ALSO snap the steer-pan/reverse tween (see _snapNext
+  -- in update()): only the steer group, so flipping an unrelated option can't hitch
+  -- the pan mid-corner. (Numeric sliders never snap -- see steerCam.set.)
+  local steerSnapKeys = { steerEnable = true, reverseSteer = true, speedFade = true }
 
   -- Build a clean cfg from a decoded preset file: start from Default, then copy
   -- over any KNOWN key (correct type; numbers clamped to range). Unknown keys are
@@ -168,11 +173,24 @@ if not steerCam then
   -- steerCam.overrides[name] until you Reset (discard) or Save (bake into the file).
   -- steerCam.cfg is the merged result the camera reads. Overrides persist as one blob.
   steerCam.overrides = {}
+  -- Drop delta keys that no longer exist in steerCam.defaults (e.g. a setting renamed in
+  -- an update): left in, they'd merge into cfg as dead keys and keep the preset flagged
+  -- "modified" forever. Returns nil when nothing real is left, so the layer vanishes.
+  local function pruneDeltas(t)
+    if type(t) ~= "table" then return nil end
+    local out
+    for k, v in pairs(t) do
+      if steerCam.defaults[k] ~= nil then out = out or {}; out[k] = v end
+    end
+    return out
+  end
   do
     local s = getStr("steerCam_overrides", "")
     if s ~= "" then
       local raw = jsonDecode(s)
-      if type(raw) == "table" then steerCam.overrides = raw end
+      if type(raw) == "table" then
+        for name, ov in pairs(raw) do steerCam.overrides[name] = pruneDeltas(ov) end
+      end
     end
   end
   local function saveOverrides() save("steerCam_overrides", jsonEncode(steerCam.overrides)) end
@@ -243,7 +261,10 @@ if not steerCam then
 
   -- Global mod on/off. When off, the camera behaves like the stock driver cam.
   steerCam.enabled = gbool(gFile.enabled, true)
-  function steerCam.setEnabled(v) steerCam.enabled = (v == true or v == 1 or v == "true"); saveGlobals() end
+  function steerCam.setEnabled(v)
+    steerCam.enabled = (v == true or v == 1 or v == "true"); saveGlobals()
+    steerCam._snapNext = true; steerCam._snapSteer = true   -- re-enable applies instantly (A/B testing)
+  end
 
   -- Driver-seat mirroring (default on). Saved values describe a LEFT-hand-drive seat
   -- (most cars are LHD); in a right-hand-drive car we auto-flip the side-specific
@@ -294,10 +315,7 @@ if not steerCam then
     end
     steerCam.preset = (steerCam.presets[entry.preset] and entry.preset) or "Default"
     steerCam.overrides = {}
-    if type(entry.overrides) == "table" and next(entry.overrides) ~= nil then
-      local ov = {}; for k, v in pairs(entry.overrides) do ov[k] = v end
-      steerCam.overrides[steerCam.preset] = ov
-    end
+    steerCam.overrides[steerCam.preset] = pruneDeltas(entry.overrides)   -- copies + drops dead keys
     steerCam.applyCfg()
   end
 
@@ -336,6 +354,7 @@ if not steerCam then
     if steerCam.notaryEnabled then steerCam.overrides = {} end   -- fresh preset on this car
     steerCam.applyCfg()
     persistActive()
+    steerCam._snapNext = true; steerCam._snapSteer = true   -- preset switch applies instantly
   end
 
   -- Re-scan the presets folder at runtime (console: steerCam.reloadPresets()).
@@ -354,8 +373,9 @@ if not steerCam then
     "glanceEnable", "glanceLeft", "glanceOffsetLeft", "glanceRight", "glanceOffsetRight", "glanceBack", "glanceOffsetBack", "glanceBackRoll",
     "glanceTransition", "glanceTime", "glanceCurve", "glanceFastEnable", "glanceFastTime", "glanceFastSpeed",
     "speedModEnable", "vertigo", "vertigoFov", "vertigoDolly", "speedRoll", "rollAngle", "rollSource", "speedRange",
-    "vertInertia", "vertInertiaMax", "vertSquishMax", "vertInertiaSpeed", "speedVibe", "speedVibeAmount", "speedVibeSpeed",
-    "engineVibe", "vibeAmount", "vibeRotAmount", "straightenEnable", "straightenSpeed",
+    "vertInertia", "vertInertiaMax", "vertSquishMax", "vertInertiaSpeed", "speedRumble", "speedRumbleDistance", "speedRumbleSpeed",
+    "engineVibe", "vibeAmount", "vibeRotAmount",
+    "velAim", "velAimInfluence", "velAimAnticipate", "velAimRampSpeed",
   }
   local function encVal(v)
     local t = type(v)
@@ -383,17 +403,16 @@ if not steerCam then
 
   -- UI: save the current effective settings as a named preset (global -- available to
   -- every car). New name -> new file; existing name -> overwrite in place (the UI
-  -- confirms first). Protected presets (Default/Dev's) and the reserved "Custom" name
-  -- are refused. User presets are written WITHOUT a protected tag, so they stay
-  -- editable (power users can add "protected": true to the JSON by hand). The display
-  -- name lives in the JSON's "name" field; the filename is just a slug.
+  -- confirms first). ANY preset can be overwritten -- including the shipped
+  -- Default/Dev's ones: whoever saves owns the truth (the write lands in the user
+  -- folder, shadowing the mod's copy, so it also survives mod updates). "protected"
+  -- now only guards DELETE (and shows the lock glyph); it is preserved on re-save.
+  -- Only the reserved "Custom" name is refused. The display name lives in the JSON's
+  -- "name" field; the filename is just a slug.
   function steerCam.savePreset(name)
     name = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if name == "" then return { ok = false, reason = "empty" } end
     if name == "Custom" then return { ok = false, reason = "reserved" } end
-    if steerCam.presetProtected and steerCam.presetProtected[name] then
-      return { ok = false, reason = "protected" }
-    end
     local file = steerCam.presetFiles and steerCam.presetFiles[name]   -- overwrite in place
     if not file then
       local slug = name:lower():gsub("%s+", "-"):gsub("[^a-z0-9%-_]", "")
@@ -405,10 +424,10 @@ if not steerCam then
       end
     end
     local cfg = steerCam.getCfg()
-    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat, cfg.notaryEnabled = nil, nil, nil, nil, nil   -- not preset data
+    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat, cfg.notaryEnabled, cfg.vibeStopScale = nil, nil, nil, nil, nil, nil   -- not preset data
     -- new presets: order empty (-> sorts at the default 100, keeping today's order) and
-    -- unprotected. Overwriting an existing one keeps its hand-set order.
-    cfg.name, cfg.order, cfg.protected = name, (steerCam.presetOrderRaw and steerCam.presetOrderRaw[name]) or "", false
+    -- unprotected. Overwriting an existing one keeps its hand-set order + protected tag.
+    cfg.name, cfg.order, cfg.protected = name, (steerCam.presetOrderRaw and steerCam.presetOrderRaw[name]) or "", (steerCam.presetProtected and steerCam.presetProtected[name]) == true
     writePresetFile(file, cfg)
     steerCam.loadPresets()
     steerCam.setPreset(name)   -- select the new preset (clean, no overrides yet)
@@ -440,20 +459,21 @@ if not steerCam then
       steerCam.overrides[name] = nil
       persistActive()
       steerCam.applyCfg()
+      steerCam._snapNext = true; steerCam._snapSteer = true   -- reset applies instantly
     end
   end
 
   -- UI: bake the current preset's overrides into its own file (Save changes to this
-  -- preset), then clear them. Refuses Custom and protected presets.
+  -- preset), then clear them. Refuses only Custom (no file of its own) -- shipped
+  -- protected presets are saveable like any other: your save becomes the truth.
   function steerCam.saveChanges()
     local name = steerCam.preset
     if name == "Custom" then return { ok = false, reason = "reserved" } end
-    if steerCam.presetProtected and steerCam.presetProtected[name] then return { ok = false, reason = "protected" } end
     local file = steerCam.presetFiles and steerCam.presetFiles[name]
     if not file then return { ok = false, reason = "missing" } end
     local cfg = steerCam.getCfg()
-    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat, cfg.notaryEnabled = nil, nil, nil, nil, nil
-    cfg.name, cfg.order, cfg.protected = name, (steerCam.presetOrderRaw and steerCam.presetOrderRaw[name]) or "", false
+    cfg.preset, cfg.modified, cfg.modEnabled, cfg.mirrorSeat, cfg.notaryEnabled, cfg.vibeStopScale = nil, nil, nil, nil, nil, nil
+    cfg.name, cfg.order, cfg.protected = name, (steerCam.presetOrderRaw and steerCam.presetOrderRaw[name]) or "", (steerCam.presetProtected and steerCam.presetProtected[name]) == true
     writePresetFile(file, cfg)
     steerCam.overrides[name] = nil; saveOverrides()
     steerCam.loadPresets()
@@ -482,6 +502,15 @@ if not steerCam then
     steerCam.overrides[steerCam.preset] = ov
     persistActive()
     steerCam.applyCfg()
+    -- Toggles/dropdowns apply with NO easing next frame (A/B testing an effect at speed
+    -- must be a hard state flip). Numeric sliders deliberately do NOT snap: a drag fires
+    -- set() every tick, and per-tick snapping would hold the anti-jitter low-passes
+    -- (spdSmooth, velAim) open for the whole drag -- raw dune-chop straight to the view.
+    -- A slider's target moves through its usual (fast) ease instead.
+    if bools[key] or strs[key] then
+      steerCam._snapNext = true
+      if steerSnapKeys[key] then steerCam._snapSteer = true end
+    end
   end
 
   -- UI: read the active profile's values + which preset is selected. Every setting is
@@ -500,6 +529,7 @@ if not steerCam then
     out.mirrorSeat = steerCam.mirrorSeat
     out.notaryEnabled = steerCam.notaryEnabled
     out.version = steerCam.version
+    out.vibeStopScale = steerCam.vibeStopScale
     return out
   end
 
@@ -619,7 +649,7 @@ if not steerCam then
   function steerCam.getGlanceState()
     local st = steerCam.glanceStack
     local hold = (#st > 0) and st[#st] or 0   -- top of the stack = the live held side
-    return { hold = hold, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview }
+    return { hold = hold, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview, active = steerCam._frame or 0 }
   end
 end
 
@@ -749,6 +779,7 @@ return function(...)
   -- lateral push (inertia head-roll) and vertical push (head-lift), low-passed.
   o.prevVel = vec3(); o.velInit = false   -- last velocity + first-frame guard
   o.latAccLP = 0; o.vertAccLP = 0         -- low-passed lateral / vertical accel (m/s^2)
+  o.accLP = vec3()                        -- low-passed FULL accel vector (world) -- feeds velocity-aim anticipation
   o.vertOff = 0                           -- current head-lift offset (m, + = up off seat)
   o.vibePhase = 0; o.vibeEnv = 0          -- engine-vibration time accumulator + envelope
   o.spdVibePhase = 0                      -- speed-vibration time accumulator
@@ -763,6 +794,7 @@ return function(...)
   local stockUpdate = o.update
   o.update = function(self, data)
     stockUpdate(self, data)        -- stock fills data.res.pos / rot / fov
+    steerCam._frame = (steerCam._frame or 0) + 1   -- heartbeat: UI greys out when this stalls (not in the SteerCam view)
 
     -- Reassert "driver" to the UI every 0.5s while active. The guihooks wrapper
     -- (above) already remaps the engine's own notifications, but external toggles
@@ -783,6 +815,17 @@ return function(...)
     local c = steerCam.cfg
     local dt = data.dt
     if dt < 1e-4 then dt = 1e-4 end
+
+    -- A setting just changed (UI toggle/slider, preset switch, mod re-enable): consume
+    -- the snap flags so every effect smoother jumps STRAIGHT to its current target this
+    -- frame instead of easing there. Flipping an option A/Bs the two states instantly --
+    -- that's what makes testing an effect at speed readable. snapSteer additionally
+    -- snaps the steer-pan + reverse tween, and is only set for steer-group changes so
+    -- scrubbing an unrelated slider can't hitch the pan mid-corner. (The glance tween
+    -- and the g-force low-passes are left alone: those are motion, not option easing.)
+    local snap = steerCam._snapNext == true
+    local snapSteer = steerCam._snapSteer == true
+    steerCam._snapNext, steerCam._snapSteer = nil, nil
 
     -- Driver-seat mirroring: the saved values describe a LEFT-hand-drive seat; in
     -- a right-hand-drive car we flip the side-specific ones (camera pan + glance
@@ -839,16 +882,7 @@ return function(...)
         gFwd:set(data.res.rot * vecY)                 -- current look direction
         if (c.camYaw or 0) ~= 0 then
           local camYaw = mirrored and -(c.camYaw) or c.camYaw   -- flip pan for a RHD seat
-          -- "Straighten at speed" (immersive extra): fade the Rotate L/R pan toward
-          -- zero as speed approaches straightenSpeed (S-curve), re-centring at speed.
-          if c.speedModEnable and c.straightenEnable then
-            local spd = (data.vel and data.vel:length()) or 0
-            local ss = (c.straightenSpeed or 120) / 3.6        -- km/h -> m/s
-            camYaw = camYaw * (1 - easeSCurve(clamp01(spd / (ss > 0.1 and ss or 0.1))))
-          end
-          if camYaw ~= 0 then
-            gFwd:set(quatFromAxisAngle(vecZup, rad(camYaw)) * gFwd)   -- azimuth; - = left
-          end
+          gFwd:set(quatFromAxisAngle(vecZup, rad(camYaw)) * gFwd)   -- azimuth; - = left
         end
         if (c.camPitch or 0) ~= 0 then
           gRight:setCross(gFwd, vecZup); gRight:normalize()            -- horizontal right
@@ -914,6 +948,7 @@ return function(...)
       self.reverseTargetVal = revTarget
       self.reverseProg = 0
     end
+    if snapSteer then self.reverseProg = 1; self.reverseFrom = self.reverseTargetVal end   -- setting change: finish the tween now
     local rt = c.reverseTime or 0
     if rt <= 5 then
       self.reverseProg = 1
@@ -934,7 +969,7 @@ return function(...)
       local floor = (c.fadeFloor or 0) / 100
       yawTarget = yawTarget * (floor + (1 - floor) * ramp)
     end
-    self.steerYaw = self.steerYaw + (yawTarget - self.steerYaw) * clamp01(dt * c.stiffness)
+    self.steerYaw = self.steerYaw + (yawTarget - self.steerYaw) * (snapSteer and 1 or clamp01(dt * c.stiffness))
 
     -- Blind-spot glance: the camera blends a (yaw, lateral, roll) pose between the
     -- FRONT target (the steer-follow aim) and the three glance targets. The active
@@ -944,6 +979,16 @@ return function(...)
     -- so rapid side-swaps (and changing your mind mid-transition) flow continuously
     -- from wherever the camera is, instead of snapping. Category disabled -> front.
     local targetSide = c.glanceEnable and steerCam.glanceTarget() or 0
+    -- is the active glance coming from the UI Preview (no hold/toggle keybind down)? If so,
+    -- do NOT mirror-swap the L/R settings below, so tuning stays WYSIWYG: "Preview left"
+    -- tracks the "Look left" sliders. Keybind/toggle glances still mirror for RHD symmetry.
+    local fromPreview = (#steerCam.glanceStack == 0) and (steerCam.glanceToggleSide == 0)
+    -- push the active side to the UI the INSTANT it changes (same frame the camera reacts) so
+    -- the highlight doesn't trail by up to a poll tick. Fires only on a change, not per frame.
+    if targetSide ~= steerCam._uiGlanceSide then
+      steerCam._uiGlanceSide = targetSide
+      if guihooks then guihooks.trigger('SteerCamGlanceSide', targetSide) end
+    end
     local tgtYaw, tgtLat, tgtRoll
     if targetSide == 0 then
       tgtYaw, tgtLat, tgtRoll = self.steerYaw, 0, 0          -- front = steer-follow aim
@@ -962,7 +1007,7 @@ return function(...)
       -- right glance keybind still looks right but uses the left settings.
       local leftInput = targetSide > 0
       local useLeft = leftInput
-      if mirrored then useLeft = not useLeft end
+      if mirrored and not fromPreview then useLeft = not useLeft end
       local gAngle  = useLeft and (c.glanceLeft or 0)       or (c.glanceRight or 0)
       local gOffset = useLeft and (c.glanceOffsetLeft or 0) or (c.glanceOffsetRight or 0)
       local dir = leftInput and -1 or 1
@@ -1038,7 +1083,7 @@ return function(...)
     -- (shared ceiling); the inertia effects below use g-force instead of speedRange.
     -- Speed is low-passed so tyre scrub/surge can't jitter the roll or FOV.
     local spdRaw = (data.vel and data.vel:length()) or 0
-    self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * clamp01(dt * 3)
+    self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * (snap and 1 or clamp01(dt * 3))
     local sr = (c.speedRange or 160) / 3.6            -- km/h -> m/s ceiling
     local speedFac = clamp01(self.spdSmooth / (sr > 0.1 and sr or 0.1))
     local modsOn = c.speedModEnable
@@ -1050,12 +1095,17 @@ return function(...)
     local GFULL = 9.81
     local latAcc, vertAcc = 0, 0
     if data.veh ~= nil and data.vel ~= nil then
+      if self.accLP == nil then self.accLP = vec3() end   -- live-reload safety: a camera instance may predate this field
       gFwd:set(data.veh:getDirectionVector())
       gUp:set(data.veh:getDirectionVectorUp())
       gRight:setCross(gFwd, gUp); gRight:normalize()    -- car right (world)
       if self.velInit then
         latAcc  = (data.vel:dot(gRight) - self.prevVel:dot(gRight)) / dt   -- + = pushed right
         vertAcc = (data.vel.z - self.prevVel.z) / dt                       -- + = pushed up
+        local aLP = clamp01(dt * 6)   -- full accel vector too (same low-pass) -- velocity-aim anticipation reads it
+        self.accLP.x = self.accLP.x + ((data.vel.x - self.prevVel.x) / dt - self.accLP.x) * aLP
+        self.accLP.y = self.accLP.y + ((data.vel.y - self.prevVel.y) / dt - self.accLP.y) * aLP
+        self.accLP.z = self.accLP.z + ((data.vel.z - self.prevVel.z) / dt - self.accLP.z) * aLP
       end
       self.prevVel:set(data.vel)
       self.velInit = true
@@ -1095,7 +1145,7 @@ return function(...)
       end
       rollTarget = rad(c.rollAngle or 0) * rollInput
     end
-    self.rollCur = self.rollCur + (rollTarget - self.rollCur) * clamp01(dt * 6)
+    self.rollCur = self.rollCur + (rollTarget - self.rollCur) * (snap and 1 or clamp01(dt * 6))
 
     -- vertical head inertia ("head lift"): the body lags the car's vertical motion --
     -- floating UP off the seat when the car drops away (cresting a rise, going light
@@ -1116,7 +1166,7 @@ return function(...)
     -- spring the head toward the target; vertInertiaSpeed sets how fast. LOW = floaty and
     -- gradual (a brief moment of air only lifts partway; the longer you fall the higher it
     -- climbs toward max), HIGH = snaps to the target almost instantly.
-    self.vertOff = self.vertOff + (vTarget - self.vertOff) * clamp01(dt * (c.vertInertiaSpeed or 9))
+    self.vertOff = self.vertOff + (vTarget - self.vertOff) * (snap and 1 or clamp01(dt * (c.vertInertiaSpeed or 9)))
     if self.vertOff ~= 0 and data.veh ~= nil then
       gUp:set(data.veh:getDirectionVectorUp())
       gUp:setScaled(self.vertOff)
@@ -1124,15 +1174,15 @@ return function(...)
     end
 
     -- speed vibration: a continuous positional buzz that grows with speed (tyre/road
-    -- rumble), reaching full at speedVibeSpeed. Same noise as the engine buzz, on its
+    -- rumble), reaching full at speedRumbleSpeed. Same noise as the engine buzz, on its
     -- own phase so the two don't sync up. Amplitude is in mm, ramped by smoothed speed.
-    if modsOn and c.speedVibe and data.veh ~= nil then
-      local sv = (c.speedVibeSpeed or 200) / 3.6     -- km/h -> m/s (full-effect speed)
+    if modsOn and c.speedRumble and data.veh ~= nil then
+      local sv = (c.speedRumbleSpeed or 200) / 3.6     -- km/h -> m/s (full-effect speed)
       local svFac = clamp01(self.spdSmooth / (sv > 0.1 and sv or 0.1))
       if svFac > 0.001 then
         self.spdVibePhase = self.spdVibePhase + dt
         local t = self.spdVibePhase * 6.2831853 + 50.0
-        local amp = (c.speedVibeAmount or 0) * 0.001 * svFac     -- mm -> m, ramped by speed
+        local amp = (c.speedRumbleDistance or 0) * 0.001 * svFac     -- mm -> m, ramped by speed
         local nx, ny, nz = vibeNoise(t, VIBE_FREQ_SPEED)         -- higher pitch than the engine buzz
         gFwd.x = amp * nx; gFwd.y = amp * ny; gFwd.z = amp * nz
         data.res.pos:setAdd(gFwd)
@@ -1141,8 +1191,8 @@ return function(...)
 
     -- engine vibration: a small, rapid positional buzz. steerCamVibe is the fed STATE
     -- per vehicle (1 = engine starting, 2 = engine stopping); the amplitude SCALE lives
-    -- HERE next to the slider -- the start is full vibeAmount, the shut-down a quarter
-    -- of it (gentler) -- and the envelope fades it in/out sharply. Two sines per axis at
+    -- HERE next to the slider -- the start is full vibeAmount, the shut-down the gentler
+    -- steerCam.vibeStopScale fraction of it -- and the envelope fades it in/out sharply. Two sines per axis at
     -- different rates give a lively, non-repeating, frame-rate-independent shake; sub-cm,
     -- so it reads as vibration without being nauseating.
     local vibeState = 0
@@ -1150,8 +1200,8 @@ return function(...)
       local vid = data.veh.getID and data.veh:getID() or nil
       if vid ~= nil then vibeState = steerCamVibe[vid] or 0 end
     end
-    local vibeTarget = (vibeState == 1) and 1 or (vibeState == 2 and 0.25 or 0)   -- start full, stop a quarter
-    self.vibeEnv = self.vibeEnv + (vibeTarget - self.vibeEnv) * clamp01(dt * 14)
+    local vibeTarget = (vibeState == 1) and 1 or (vibeState == 2 and steerCam.vibeStopScale or 0)   -- start full, stop the vibeStopScale fraction
+    self.vibeEnv = self.vibeEnv + (vibeTarget - self.vibeEnv) * (snap and 1 or clamp01(dt * 14))
     if self.vibeEnv > 0.001 and data.veh ~= nil then
       self.vibePhase = self.vibePhase + dt
       local t = self.vibePhase * 6.2831853       -- seconds -> radians
@@ -1160,6 +1210,57 @@ return function(...)
       gFwd.x = amp * nx; gFwd.y = amp * ny; gFwd.z = amp * nz
       data.res.pos:setAdd(gFwd)
     end
+
+    -- ----- Velocity aim ("Aim camera at velocity") ---------------------------
+    -- At speed, lean the AIM/tilt toward where the car is actually MOVING (velocity), not
+    -- just where it points -- so a sliding buggy doesn't feel bolted to the chassis. Pitch
+    -- servos toward the trajectory; yaw ADDS the slip angle on top of the steer-pan/glance
+    -- (additive, so it composes instead of fighting); roll leans into the lateral SLIP.
+    -- Anticipate (ms) aims at the
+    -- PREDICTED vector vel + accel*T instead of the current one: cornering accel is
+    -- centripetal (points into the turn), so the aim leads by however far the vector will
+    -- swing in the next T -- and over a crest (accel = gravity) it dips toward the
+    -- ballistic arc early. Scaled by influence% + a speed ramp, and low-passed so dune
+    -- chop / impacts don't snap the aim. Applied in the roll block below
+    -- (dyTgt/dpTgt -> smoothed velAimYaw/velAimPitch on gFwd; drTgt -> velAimRoll adds to totalRoll).
+    local dpTgt, dyTgt, drTgt = 0, 0, 0
+    if modsOn and c.velAim and data.vel ~= nil and data.veh ~= nil then
+      local sp = data.vel:length()
+      local ds = (c.velAimRampSpeed or 60) / 3.6
+      local infl = (c.velAimInfluence or 0) * 0.01 * clamp01(self.spdSmooth / (ds > 0.1 and ds or 0.1))
+      if sp > 1.0 and infl > 0.001 then
+        local ant = (c.velAimAnticipate or 0) * 0.001            -- ms -> s of look-ahead
+        gUp.x = data.vel.x + self.accLP.x * ant                  -- predicted velocity (world), temp
+        gUp.y = data.vel.y + self.accLP.y * ant
+        gUp.z = data.vel.z + self.accLP.z * ant
+        local psp = gUp:length()
+        if psp < 1.0 or gUp:dot(data.vel) <= 0 then              -- prediction collapsed (hard braking) -> use actual
+          gUp:set(data.vel); psp = sp
+        end
+        local inv = 1 / psp
+        gFwd:set(data.res.rot * vecY)                              -- current aim (world), temp
+        dpTgt = (math.asin(clampUnit(gUp.z * inv)) - math.asin(clampUnit(gFwd.z))) * infl
+        -- Yaw = the SLIP angle (predicted-velocity heading vs CAR heading), ADDED on top
+        -- of whatever the steer-pan/glance already did this frame -- so it inherits the
+        -- drift without fighting the other yaw sources. With no anticipation: ~0 in clean
+        -- grip, exactly the drift angle in a slide; anticipation adds corner lead on top
+        -- of both. Faded out as forward motion dies (reversing / spin-outs past 90deg)
+        -- so it never slings the camera toward the rear.
+        gFwd:set(data.veh:getDirectionVector())                    -- car heading (world), temp
+        local fwdSp = data.vel:dot(gFwd)
+        if fwdSp > 0.1 then
+          local d = math.atan2(gUp.y, gUp.x) - math.atan2(gFwd.y, gFwd.x)
+          if d > math.pi then d = d - 6.2831853 elseif d < -math.pi then d = d + 6.2831853 end
+          dyTgt = d * infl * clamp01(fwdSp * 0.33)                 -- full above ~11 km/h of forward motion
+        end
+        gRight:setCross(gFwd, data.veh:getDirectionVectorUp()); gRight:normalize()
+        drTgt = clampUnit(data.vel:dot(gRight) / sp) * infl * rad(30)   -- slip lean stays on the ACTUAL vel (30deg ref at full)
+      end
+    end
+    local vaLP = snap and 1 or clamp01(dt * 5)
+    self.velAimPitch = (self.velAimPitch or 0) + (dpTgt - (self.velAimPitch or 0)) * vaLP
+    self.velAimYaw   = (self.velAimYaw   or 0) + (dyTgt - (self.velAimYaw   or 0)) * vaLP
+    self.velAimRoll  = (self.velAimRoll  or 0) + (drTgt - (self.velAimRoll  or 0)) * vaLP
 
     -- ----- Final camera ROLL (single, additive) ------------------------------
     -- The third rotation axis. Yaw (L/R: steer + glance) and pitch (U/D: override)
@@ -1170,10 +1271,15 @@ return function(...)
     -- if the override is off -- rolled by the total about the look axis. No stock
     -- wobble, and the bank is recomputed fresh so it stays right even glancing 180
     -- back. Add another roll source later by just adding it into totalRoll.
-    local totalRoll = rad(self.poseRoll or 0)            -- glance head-tilt (blended)
+    local totalRoll = rad(self.poseRoll or 0) + (self.velAimRoll or 0)   -- glance head-tilt (blended) + velocity-aim slip-lean
     if modsOn and c.speedRoll then totalRoll = totalRoll - self.rollCur end   -- speed lean
-    if data.veh ~= nil and (c.camEnable or totalRoll ~= 0) then
+    if data.veh ~= nil and (c.camEnable or totalRoll ~= 0 or (self.velAimYaw or 0) ~= 0 or (self.velAimPitch or 0) ~= 0) then
       gFwd:set(data.res.rot * vecY)                            -- final look (aim + yaw)
+      if (self.velAimYaw or 0) ~= 0 then gFwd:set(quatFromAxisAngle(vecZup, self.velAimYaw) * gFwd) end   -- velocity-aim yaw (additive slip lead)
+      if (self.velAimPitch or 0) ~= 0 then                                 -- velocity-aim pitch (trajectory)
+        gRight:setCross(gFwd, vecZup); gRight:normalize()
+        gFwd:set(quatFromAxisAngle(gRight, self.velAimPitch) * gFwd)
+      end
       if c.camEnable then
         gUp:set(data.veh:getDirectionVectorUp())              -- bank base = car/seat up
         local sh = (c.stableHorizon or 0) / 100

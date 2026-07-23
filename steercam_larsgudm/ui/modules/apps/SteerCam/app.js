@@ -5,13 +5,32 @@ angular.module('beamng.apps')
       '<div class="steerCamApp">',
         '<style>',
           '.steerCamApp{font-family:"Segoe UI",sans-serif;color:#e8e8ea;background:rgba(18,18,20,0.88);position:relative;',
-            'border-radius:7px;padding:9px 11px;box-sizing:border-box;width:100%;height:100%;overflow:hidden;font-size:12px;',
+            'border-radius:7px;padding:9px 11px;box-sizing:border-box;width:100%;height:100%;overflow:hidden;font-size:13px;',
             'display:flex;flex-direction:column}',
           // title + presets rows stay pinned; only the categories scroll, so the user can
           // always see/change the active preset and the mod toggle. min-height:0 lets the
           // scroll area shrink below its content (required for the inner scrollbar to work).
-          '.steerCamApp .sc-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}',
+          // padding-right keeps the right-aligned values clear of the scrollbar (which
+          // otherwise eats the gap between the value text and the panel edge).
+          '.steerCamApp .sc-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:8px}',
           '.steerCamApp .sc-title{font-weight:700;font-size:14px;letter-spacing:.5px;color:#ff7a18}',
+          // when the SteerCam view is NOT active, tweaks are not visible -> grey the title +
+          // a grey ring inside the panel edge as a heads-up (.sc-inactive set by the poll).
+          '.steerCamApp.sc-inactive .sc-title{color:#9a9aa0}',
+          '.steerCamApp.sc-inactive{box-shadow:inset 0 0 0 2px #8a8a90}',
+          // ...and EVERYTHING oranges-out to grey while the view is inactive: sliders + their
+          // thumbs (accent-color), every accent (headers, glyphs, twirl, info, gear, presets
+          // label) and the param names. Orange = a live/active change; grey = you are changing
+          // it but not seeing it (not in the SteerCam view). !important: the per-input orange
+          // rules below (.sc-row input[type=range] etc.) are more specific and would win,
+          // leaving the sliders orange while inactive.
+          '.steerCamApp.sc-inactive input{accent-color:#8a8a90 !important}',
+          '.steerCamApp.sc-inactive .sc-sec,.steerCamApp.sc-inactive .sc-look-hd,',
+            '.steerCamApp.sc-inactive .sc-tw,.steerCamApp.sc-inactive .sc-info,',
+            '.steerCamApp.sc-inactive .sc-gear,.steerCamApp.sc-inactive .sc-presets-lbl,',
+            '.steerCamApp.sc-inactive .sc-look-ico,.steerCamApp.sc-inactive .sc-look-name,',
+            '.steerCamApp.sc-inactive .sc-row>span{color:#9a9aa0}',
+          '.steerCamApp.sc-inactive .sc-look-on,.steerCamApp.sc-inactive .sc-glance-btns button.active{background:#8a8a90}',
           '.steerCamApp .sc-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex:0 0 auto}',
           '.steerCamApp .sc-mod-en{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#9a9aa0;cursor:pointer}',
           '.steerCamApp .sc-mod-en input{accent-color:#ff7a18;margin:0}',
@@ -22,15 +41,27 @@ angular.module('beamng.apps')
             'border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer}',
           '.steerCamApp .sc-presets button:hover{background:rgba(255,255,255,0.16)}',
           '.steerCamApp .sc-presets button.active{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
-          '.steerCamApp .sc-glance-btns{display:flex;gap:5px;margin:7px 0 2px}',
-          '.steerCamApp .sc-glance-btns button{flex:1 1 0;background:rgba(255,255,255,0.08);color:#e8e8ea;',
-            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 6px;font-size:11px;cursor:pointer}',
-          '.steerCamApp .sc-glance-btns button:hover{background:rgba(255,255,255,0.16)}',
-          '.steerCamApp .sc-glance-btns button.active{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
-          '.steerCamApp .sc-sec{font-weight:600;margin:4px 0 5px;color:#ffae6b;',
-            'border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:2px}',
+          // preview buttons as a unified segmented (radio) control: one bordered, rounded
+          // bar with the three options flush and split by thin dividers; only one is active.
+          // preview segmented (radio) control: one bordered rounded bar. It's its OWN object
+          // with a gap above the Look grid -- the user preferred two unified pieces in the
+          // category over one merged block.
+          '.steerCamApp .sc-glance-btns{display:flex;gap:0;margin:7px 0 2px;',
+            'border:1px solid rgba(255,255,255,0.14);border-radius:5px;overflow:hidden}',
+          '.steerCamApp .sc-glance-btns button{flex:1 1 0;background:rgba(255,255,255,0.06);color:#e8e8ea;',
+            'border:none;border-right:1px solid rgba(255,255,255,0.14);padding:5px 6px;font-size:12px;cursor:pointer}',
+          '.steerCamApp .sc-glance-btns button:last-child{border-right:none}',
+          '.steerCamApp .sc-glance-btns button:hover{background:rgba(255,255,255,0.14)}',
+          '.steerCamApp .sc-glance-btns button.active{background:#ff7a18;color:#161616;font-weight:700}',
+          '.steerCamApp .sc-glance-btns button.active+button{border-left:none}',
+          // category headers STICK to the top of the scroll area (position:sticky). As you
+          // scroll into the next category its header rises over this one, so the top always
+          // shows the current category. Needs an OPAQUE bg (rows scroll UNDER it) + z above rows.
+          '.steerCamApp .sc-sec{font-weight:600;margin:0 0 5px;color:#ffae6b;',
+            'border-bottom:1px solid rgba(255,255,255,0.12);padding:2px 0;',
+            'position:sticky;top:0;z-index:4;background:#1a1a1d}',
           '.steerCamApp .sc-row{display:flex;align-items:center;gap:7px;margin:5px 0}',
-          '.steerCamApp .sc-row>span{flex:0 0 84px;white-space:nowrap}',
+          '.steerCamApp .sc-row>span{flex:0 0 110px;white-space:nowrap}',
           '.steerCamApp .sc-row input[type=range]{flex:1 1 auto;min-width:34px;accent-color:#ff7a18;outline:none}',
           '.steerCamApp .sc-presets-row{display:flex;align-items:center;gap:7px;margin-bottom:8px;flex:0 0 auto;position:relative;z-index:5}',
           '.steerCamApp .sc-presets-lbl{flex:0 0 auto;font-weight:700;font-size:12px;color:#ff7a18}',
@@ -45,12 +76,72 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-dd-opt{display:flex;align-items:center;gap:6px;padding:5px 7px;font-size:11px;cursor:pointer}',
           '.steerCamApp .sc-dd-opt:hover{background:rgba(255,255,255,0.12)}',
           '.steerCamApp .sc-dd-opt.active{background:#ff7a18;color:#161616;font-weight:700}',
-          '.steerCamApp .sc-row>b{flex:0 0 42px;text-align:right;color:#fff;font-variant-numeric:tabular-nums}',
+          '.steerCamApp .sc-row>b{flex:0 0 46px;text-align:right;color:#fff;font-variant-numeric:tabular-nums}',
           '.steerCamApp .sc-chk label{display:flex;align-items:center;gap:7px;cursor:pointer}',
           '.steerCamApp .sc-chk input{accent-color:#ff7a18}',
           '.steerCamApp.locked .sc-row{opacity:0.5}',
           '.steerCamApp.locked .sc-chk label{cursor:default}',
           '.steerCamApp .sc-row.sc-dim{opacity:0.45}',
+          // "Look options" settings, arranged spatially in a grey rounded panel: a LEFT
+          // column and a RIGHT column on top, with the BEHIND group spanning the full width
+          // beneath -- so the layout itself mirrors the directions you look. Each option is
+          // one line: name (+ a direction-coded glyph) | slider | value; the direction
+          // sub-header carries the "Look <dir>" part, so a row reads "Look left angle".
+          // its own rounded box (gap above separates it from the preview bar). overflow:hidden
+          // clips the flush active-fill / dividers to the rounded corners.
+          '.steerCamApp .sc-look-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;overflow:hidden;',
+            'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);',
+            'border-radius:5px;padding:7px 9px;margin:6px 0 2px}',
+          // vertical divider between the two columns: each pads toward the middle and the
+          // right column carries the line, so it sits centred with even breathing room.
+          '.steerCamApp .sc-look-col{min-width:0}',   // let 1fr columns shrink instead of overflowing
+          // each group (a column, or the behind block) is its OWN grid, so the label column
+          // auto-sizes to the longest NAME in that group: name | glyph | slider(1fr) | value.
+          // The glyphs therefore line up in their own column hugging the sliders, and every
+          // slider in a group starts at one flush edge (no more glyphs trailing the names).
+          // value column is a FIXED 46px (not auto) so it never resizes as you scrub -- else
+          // the digit-count change would jiggle the flexible slider width. Wide enough for the
+          // longest Look value ("-0.15m"), right-aligned; short values just don't fill it.
+          '.steerCamApp .sc-look-col,.steerCamApp .sc-look-behind{display:grid;grid-template-columns:max-content max-content 1fr 46px;align-items:center;column-gap:5px;row-gap:5px}',
+          // outer edges pulled to the panel border (-9px = grid h-padding) so the active
+          // orange fill is flush left/right with no padding gap; content stays put via padding.
+          '.steerCamApp .sc-look-col:first-child{padding-right:9px;padding-bottom:5px;margin-top:-7px;padding-top:7px;margin-left:-9px;padding-left:9px}',
+          // right column = the .sc-look-col that follows another one (NOT :last-child — the
+          // last grid child is .sc-look-behind). It carries the centred vertical divider;
+          // padding-bottom on both + the behind's margin:0 run the line flush into the h-line.
+          '.steerCamApp .sc-look-col + .sc-look-col{padding-left:9px;padding-bottom:5px;margin-top:-7px;padding-top:7px;margin-right:-9px;padding-right:9px;border-left:1px solid rgba(255,255,255,0.16)}',
+          // BEHIND group spans full width; its top divider is pulled to the panel edges with
+          // negative margins (matching the grid h-padding) so it is flush; no top margin so
+          // the vertical divider meets it with no gap.
+          '.steerCamApp .sc-look-behind{grid-column:1 / -1;border-top:1px solid rgba(255,255,255,0.12);',
+            'margin:0 -9px 0;padding:6px 9px 0}',
+          '.steerCamApp .sc-look-hd{grid-column:1 / -1;font-size:11px;font-weight:700;letter-spacing:.5px;color:#ffae6b;margin-bottom:1px}',
+          // the cell is transparent (display:contents) so its name|glyph|slider|value become
+          // the four grid cells of the group directly -> they align across every row.
+          '.steerCamApp .sc-look-cell{display:contents}',
+          '.steerCamApp .sc-look-name{font-size:12px;white-space:nowrap;overflow:hidden}',
+          '.steerCamApp .sc-look-cell input[type=range]{width:100%;min-width:0;margin:0;accent-color:#ff7a18;outline:none}',
+          '.steerCamApp .sc-look-cell b{justify-self:end;color:#fff;font-weight:600;font-size:12px;font-variant-numeric:tabular-nums}',
+          // type-marker glyph after each property name (direction-coded; head tilt = a tilted
+          // smiley "head"). display:inline-block lets .sc-ico-tilt rotate it.
+          '.steerCamApp .sc-look-ico{color:#ff9a3c;font-size:14px;opacity:0.85}',
+          '.steerCamApp .sc-ico-tilt{transform:rotate(-16deg);font-size:14px}',
+          // active direction: the whole Look group inverts to orange (like its Preview radio
+          // button) while that side is previewed OR its hotkey is held/toggled. glanceSide
+          // (polled from the live glance state) drives it, so keybinds light it up too.
+          '.steerCamApp .sc-look-col.sc-look-on,.steerCamApp .sc-look-behind.sc-look-on{background:#ff7a18}',
+          '.steerCamApp .sc-look-on .sc-look-hd,.steerCamApp .sc-look-on .sc-look-name,.steerCamApp .sc-look-on .sc-look-cell b{color:#161616}',
+          '.steerCamApp .sc-look-on .sc-look-ico{color:#161616;opacity:1}',
+          '.steerCamApp .sc-look-on input[type=range]{accent-color:#161616}',
+          // the negative/positive highlight is a TRUE instant toggle (the input is binary
+          // on/off), so kill any inherited CSS transition -- the fill, text, glyph and slider
+          // all flip in the SAME frame, with no fade and nothing lagging behind another.
+          '.steerCamApp .sc-glance-btns button,.steerCamApp .sc-look-grid *{transition:none}',
+          // Responsive labels: when the panel is too narrow for "name + slider + value" on
+          // one line, .sc-narrow (set from JS by the panel width) hides the property NAME and
+          // lets the type-glyph stand in for it -- the direction sub-header still gives context.
+          '.steerCamApp.sc-narrow .sc-look-txt{display:none}',
+          '.steerCamApp.sc-narrow .sc-look-ico{margin-left:0;font-size:15px;opacity:1}',
           // slider with a "cap" marker (used by the quicker-glance Fast time): a relative
           // wrapper holds the range + a dashed orange line at the cap, and the thumb greys
           // (accent-color) once dragged past it.
@@ -67,12 +158,12 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-sec .sc-en{display:flex;align-items:center;justify-content:space-between}',
           '.steerCamApp .sc-sec .sc-en input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-sec-name{display:flex;align-items:center;gap:6px;flex:1 1 auto;cursor:pointer;user-select:none}',
-          '.steerCamApp .sc-tw{display:inline-block;font-size:9px;color:#ff7a18;transition:transform .15s ease}',
+          '.steerCamApp .sc-tw{display:inline-block;font-size:16px;color:#ff7a18;transition:transform .15s ease}',
           '.steerCamApp .sc-tw.open{transform:rotate(90deg)}',
           '.steerCamApp .sc-off{opacity:0.4;pointer-events:none}',
           // dim a disabled section's header text without blocking its collapse click
           '.steerCamApp .sc-sec-name.sc-dim{opacity:0.4}',
-          '.steerCamApp .sc-hint{font-size:10px;color:#9a9aa0;margin-top:6px}',
+          '.steerCamApp .sc-hint{font-size:11px;color:#9a9aa0;margin-top:6px}',
           '.steerCamApp .sc-tipsrc{display:none}',
           // small ⓘ marker appended (dynamically, via ng-if) to anything with a tooltip
           '.steerCamApp .sc-info{margin-left:3px;font-size:10px;color:#ff7a18;opacity:0.7}',
@@ -219,35 +310,38 @@ angular.module('beamng.apps')
             '<b>{{cfg.fadeFloor}}%</b></div>',
         '</div>',
 
-        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.glanceEnable}" ng-click="toggleCollapse(\'glance\')"><span class="sc-tw" ng-class="{open:!collapsed.glance}">▸<span class="sc-tipsrc">{{tips.twirl}}</span></span>Blind-spot glance<span class="sc-tipsrc" ng-if="tips.glance">{{tips.glance}}</span><span class="sc-info" ng-if="tips.glance">&#9432;</span></span><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="setEnable(\'glance\',\'glanceEnable\',cfg.glanceEnable)" ng-disabled="locked"></div></div>',
+        '<div class="sc-sec"><div class="sc-en"><span class="sc-sec-name" ng-class="{\'sc-dim\':!cfg.glanceEnable}" ng-click="toggleCollapse(\'glance\')"><span class="sc-tw" ng-class="{open:!collapsed.glance}">▸<span class="sc-tipsrc">{{tips.twirl}}</span></span>Look options<span class="sc-tipsrc" ng-if="tips.glance">{{tips.glance}}</span><span class="sc-info" ng-if="tips.glance">&#9432;</span></span><input type="checkbox" ng-model="cfg.glanceEnable" ng-change="setEnable(\'glance\',\'glanceEnable\',cfg.glanceEnable)" ng-disabled="locked"></div></div>',
         '<div class="sc-sec-body" ng-show="!collapsed.glance" ng-class="{\'sc-off\':!cfg.glanceEnable}">',
           '<div class="sc-glance-btns">',
             '<button ng-class="{active: glanceSide===\'left\'}" ng-click="toggleGlance(\'left\')">Preview left</button>',
             '<button ng-class="{active: glanceSide===\'back\'}" ng-click="toggleGlance(\'back\')">Preview back</button>',
             '<button ng-class="{active: glanceSide===\'right\'}" ng-click="toggleGlance(\'right\')">Preview right</button>',
           '</div>',
-          '<div class="sc-hint">Preview holds the glance so you can tune the angle. Needs the SteerCam view active (press C).</div>',
-          '<div class="sc-row"><span>Left angle<span class="sc-tipsrc" ng-if="tips.glanceLeft">{{tips.glanceLeft}}</span><span class="sc-info" ng-if="tips.glanceLeft">&#9432;</span></span>',
-            '<input type="range" min="0" max="170" step="1" ng-model="cfg.glanceLeft" ng-change="set(\'glanceLeft\', cfg.glanceLeft)" ng-disabled="locked">',
-            '<b>{{cfg.glanceLeft}}°</b></div>',
-          '<div class="sc-row"><span>Left offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetLeft">{{tips.glanceOffsetLeft}}</span><span class="sc-info" ng-if="tips.glanceOffsetLeft">&#9432;</span></span>',
-            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetLeft" ng-change="set(\'glanceOffsetLeft\', cfg.glanceOffsetLeft)" ng-disabled="locked">',
-            '<b>{{cfg.glanceOffsetLeft}}m</b></div>',
-          '<div class="sc-row"><span>Right angle<span class="sc-tipsrc" ng-if="tips.glanceRight">{{tips.glanceRight}}</span><span class="sc-info" ng-if="tips.glanceRight">&#9432;</span></span>',
-            '<input type="range" min="0" max="170" step="1" ng-model="cfg.glanceRight" ng-change="set(\'glanceRight\', cfg.glanceRight)" ng-disabled="locked">',
-            '<b>{{cfg.glanceRight}}°</b></div>',
-          '<div class="sc-row"><span>Right offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetRight">{{tips.glanceOffsetRight}}</span><span class="sc-info" ng-if="tips.glanceOffsetRight">&#9432;</span></span>',
-            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetRight" ng-change="set(\'glanceOffsetRight\', cfg.glanceOffsetRight)" ng-disabled="locked">',
-            '<b>{{cfg.glanceOffsetRight}}m</b></div>',
-          '<div class="sc-row"><span>Back angle<span class="sc-tipsrc" ng-if="tips.glanceBack">{{tips.glanceBack}}</span><span class="sc-info" ng-if="tips.glanceBack">&#9432;</span></span>',
-            '<input type="range" min="-90" max="90" step="1" ng-model="cfg.glanceBack" ng-change="set(\'glanceBack\', cfg.glanceBack)" ng-disabled="locked">',
-            '<b>{{cfg.glanceBack}}°</b></div>',
-          '<div class="sc-row"><span>Back offset<span class="sc-tipsrc" ng-if="tips.glanceOffsetBack">{{tips.glanceOffsetBack}}</span><span class="sc-info" ng-if="tips.glanceOffsetBack">&#9432;</span></span>',
-            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetBack" ng-change="set(\'glanceOffsetBack\', cfg.glanceOffsetBack)" ng-disabled="locked">',
-            '<b>{{cfg.glanceOffsetBack}}m</b></div>',
-          '<div class="sc-row"><span>Back roll<span class="sc-tipsrc" ng-if="tips.glanceBackRoll">{{tips.glanceBackRoll}}</span><span class="sc-info" ng-if="tips.glanceBackRoll">&#9432;</span></span>',
-            '<input type="range" min="-15" max="15" step="1" ng-model="cfg.glanceBackRoll" ng-change="set(\'glanceBackRoll\', cfg.glanceBackRoll)" ng-disabled="locked">',
-            '<b>{{cfg.glanceBackRoll}}°</b></div>',
+          '<div class="sc-look-grid">',
+            '<div class="sc-look-col" ng-class="{\'sc-look-on\': glanceSide===\'left\'}">',
+              '<div class="sc-look-hd">Look left</div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Angle</span><span class="sc-tipsrc" ng-if="tips.glanceLeft">{{tips.glanceLeft}}</span><span class="sc-info" ng-if="tips.glanceLeft">&#9432;</span></span><span class="sc-look-ico">&#8630;</span>',
+                '<input type="range" min="0" max="170" step="1" ng-model="cfg.glanceLeft" ng-change="set(\'glanceLeft\', cfg.glanceLeft)" ng-disabled="locked"><b>{{cfg.glanceLeft}}°</b></div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Offset</span><span class="sc-tipsrc" ng-if="tips.glanceOffsetLeft">{{tips.glanceOffsetLeft}}</span><span class="sc-info" ng-if="tips.glanceOffsetLeft">&#9432;</span></span><span class="sc-look-ico">&#8596;</span>',
+                '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetLeft" ng-change="set(\'glanceOffsetLeft\', cfg.glanceOffsetLeft)" ng-disabled="locked"><b>{{cfg.glanceOffsetLeft}}m</b></div>',
+            '</div>',
+            '<div class="sc-look-col" ng-class="{\'sc-look-on\': glanceSide===\'right\'}">',
+              '<div class="sc-look-hd">Look right</div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Angle</span><span class="sc-tipsrc" ng-if="tips.glanceRight">{{tips.glanceRight}}</span><span class="sc-info" ng-if="tips.glanceRight">&#9432;</span></span><span class="sc-look-ico">&#8631;</span>',
+                '<input type="range" min="0" max="170" step="1" ng-model="cfg.glanceRight" ng-change="set(\'glanceRight\', cfg.glanceRight)" ng-disabled="locked"><b>{{cfg.glanceRight}}°</b></div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Offset</span><span class="sc-tipsrc" ng-if="tips.glanceOffsetRight">{{tips.glanceOffsetRight}}</span><span class="sc-info" ng-if="tips.glanceOffsetRight">&#9432;</span></span><span class="sc-look-ico">&#8596;</span>',
+                '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetRight" ng-change="set(\'glanceOffsetRight\', cfg.glanceOffsetRight)" ng-disabled="locked"><b>{{cfg.glanceOffsetRight}}m</b></div>',
+            '</div>',
+            '<div class="sc-look-behind" ng-class="{\'sc-look-on\': glanceSide===\'back\'}">',
+              '<div class="sc-look-hd">Look behind</div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Angle</span><span class="sc-tipsrc" ng-if="tips.glanceBack">{{tips.glanceBack}}</span><span class="sc-info" ng-if="tips.glanceBack">&#9432;</span></span><span class="sc-look-ico">&#10226;</span>',
+                '<input type="range" min="-90" max="90" step="1" ng-model="cfg.glanceBack" ng-change="set(\'glanceBack\', cfg.glanceBack)" ng-disabled="locked"><b>{{cfg.glanceBack}}°</b></div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Offset</span><span class="sc-tipsrc" ng-if="tips.glanceOffsetBack">{{tips.glanceOffsetBack}}</span><span class="sc-info" ng-if="tips.glanceOffsetBack">&#9432;</span></span><span class="sc-look-ico">&#8596;</span>',
+                '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.glanceOffsetBack" ng-change="set(\'glanceOffsetBack\', cfg.glanceOffsetBack)" ng-disabled="locked"><b>{{cfg.glanceOffsetBack}}m</b></div>',
+              '<div class="sc-look-cell"><span class="sc-look-name"><span class="sc-look-txt">Head tilt</span><span class="sc-tipsrc" ng-if="tips.glanceBackRoll">{{tips.glanceBackRoll}}</span><span class="sc-info" ng-if="tips.glanceBackRoll">&#9432;</span></span><span class="sc-look-ico sc-ico-tilt">&#9786;</span>',
+                '<input type="range" min="-15" max="15" step="1" ng-model="cfg.glanceBackRoll" ng-change="set(\'glanceBackRoll\', cfg.glanceBackRoll)" ng-disabled="locked"><b>{{cfg.glanceBackRoll}}°</b></div>',
+            '</div>',
+          '</div>',
           '<div class="sc-row"><span>Glance transition<span class="sc-tipsrc" ng-if="tips.glanceTransition">{{tips.glanceTransition}}</span><span class="sc-info" ng-if="tips.glanceTransition">&#9432;</span></span>',
             '<div class="sc-dd" ng-mouseleave="openDD=null">',
               '<button class="sc-dd-head" ng-click="toggleDD(\'transition\')" ng-disabled="locked">{{transitionLabel(cfg.glanceTransition)}}<span class="sc-dd-arr">▾</span></button>',
@@ -265,7 +359,7 @@ angular.module('beamng.apps')
                 '<div class="sc-dd-opt" ng-repeat="o in curveOptions" ng-class="{active: cfg.glanceCurve===o.k}" ng-click="setCurve(o.k); openDD=null">{{o.l}}</div>',
               '</div>',
             '</div></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.glanceFastEnable" ng-change="set(\'glanceFastEnable\', cfg.glanceFastEnable)" ng-disabled="locked"> Glance quicker with speed<span class="sc-tipsrc" ng-if="tips.glanceFastEnable">{{tips.glanceFastEnable}}</span><span class="sc-info" ng-if="tips.glanceFastEnable">&#9432;</span></label></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.glanceFastEnable" ng-change="set(\'glanceFastEnable\', cfg.glanceFastEnable)" ng-disabled="locked"> Glance quicker at speed<span class="sc-tipsrc" ng-if="tips.glanceFastEnable">{{tips.glanceFastEnable}}</span><span class="sc-info" ng-if="tips.glanceFastEnable">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.glanceFastEnable}"><span>Fast time<span class="sc-tipsrc" ng-if="tips.glanceFastTime">{{tips.glanceFastTime}}</span><span class="sc-info" ng-if="tips.glanceFastTime">&#9432;</span></span>',
             '<div class="sc-slider-wrap sc-split">',
               // the real, interactive ORANGE native slider (the control)
@@ -316,24 +410,30 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertInertia}"><span>Response<span class="sc-tipsrc" ng-if="tips.vertInertiaSpeed">{{tips.vertInertiaSpeed}}</span><span class="sc-info" ng-if="tips.vertInertiaSpeed">&#9432;</span></span>',
             '<input type="range" min="0.1" max="4" step="0.1" ng-model="cfg.vertInertiaSpeed" ng-change="set(\'vertInertiaSpeed\', cfg.vertInertiaSpeed)" ng-disabled="locked || !cfg.vertInertia">',
             '<b>{{cfg.vertInertiaSpeed | number:1}}</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedVibe" ng-change="set(\'speedVibe\', cfg.speedVibe)" ng-disabled="locked"> Speed vibration<span class="sc-tipsrc" ng-if="tips.speedVibe">{{tips.speedVibe}}</span><span class="sc-info" ng-if="tips.speedVibe">&#9432;</span></label></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedVibe}"><span>Rumble amount<span class="sc-tipsrc" ng-if="tips.speedVibeAmount">{{tips.speedVibeAmount}}</span><span class="sc-info" ng-if="tips.speedVibeAmount">&#9432;</span></span>',
-            '<input type="range" min="0" max="2" step="0.01" ng-model="cfg.speedVibeAmount" ng-change="set(\'speedVibeAmount\', cfg.speedVibeAmount)" ng-disabled="locked || !cfg.speedVibe">',
-            '<b>{{cfg.speedVibeAmount | number:2}}mm</b></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedVibe}"><span>Rumble speed<span class="sc-tipsrc" ng-if="tips.speedVibeSpeed">{{tips.speedVibeSpeed}}</span><span class="sc-info" ng-if="tips.speedVibeSpeed">&#9432;</span></span>',
-            '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedVibeSpeed" ng-change="set(\'speedVibeSpeed\', cfg.speedVibeSpeed)" ng-disabled="locked || !cfg.speedVibe">',
-            '<b style="flex:0 0 64px">{{cfg.speedVibeSpeed}} km/h</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.engineVibe" ng-change="set(\'engineVibe\', cfg.engineVibe)" ng-disabled="locked"> Engine vibration<span class="sc-tipsrc" ng-if="tips.engineVibe">{{tips.engineVibe}}</span><span class="sc-info" ng-if="tips.engineVibe">&#9432;</span></label></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedRumble" ng-change="set(\'speedRumble\', cfg.speedRumble)" ng-disabled="locked"> Speed rumble<span class="sc-tipsrc" ng-if="tips.speedRumble">{{tips.speedRumble}}</span><span class="sc-info" ng-if="tips.speedRumble">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRumble}"><span>Rumble distance<span class="sc-tipsrc" ng-if="tips.speedRumbleDistance">{{tips.speedRumbleDistance}}</span><span class="sc-info" ng-if="tips.speedRumbleDistance">&#9432;</span></span>',
+            '<input type="range" min="0" max="2" step="0.01" ng-model="cfg.speedRumbleDistance" ng-change="set(\'speedRumbleDistance\', cfg.speedRumbleDistance)" ng-disabled="locked || !cfg.speedRumble">',
+            '<b>{{cfg.speedRumbleDistance | number:2}}mm</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRumble}"><span>Rumble speed<span class="sc-tipsrc" ng-if="tips.speedRumbleSpeed">{{tips.speedRumbleSpeed}}</span><span class="sc-info" ng-if="tips.speedRumbleSpeed">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedRumbleSpeed" ng-change="set(\'speedRumbleSpeed\', cfg.speedRumbleSpeed)" ng-disabled="locked || !cfg.speedRumble">',
+            '<b style="flex:0 0 64px">{{cfg.speedRumbleSpeed}} km/h</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.engineVibe" ng-change="set(\'engineVibe\', cfg.engineVibe)" ng-disabled="locked"> Engine ignition vibration<span class="sc-tipsrc" ng-if="tips.engineVibe">{{tips.engineVibe}}</span><span class="sc-info" ng-if="tips.engineVibe">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Vibration amount<span class="sc-tipsrc" ng-if="tips.vibeAmount">{{tips.vibeAmount}}</span><span class="sc-info" ng-if="tips.vibeAmount">&#9432;</span></span>',
             '<input type="range" min="0" max="0.5" step="0.01" ng-model="cfg.vibeAmount" ng-change="set(\'vibeAmount\', cfg.vibeAmount)" ng-disabled="locked || !cfg.engineVibe">',
             '<b>{{cfg.vibeAmount}}cm</b></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Rotation amount<span class="sc-tipsrc" ng-if="tips.vibeRotAmount">{{tips.vibeRotAmount}}</span><span class="sc-info" ng-if="tips.vibeRotAmount">&#9432;</span></span>',
             '<input type="range" min="0" max="1" step="0.01" ng-model="cfg.vibeRotAmount" ng-change="set(\'vibeRotAmount\', cfg.vibeRotAmount)" ng-disabled="locked || !cfg.engineVibe">',
             '<b>{{cfg.vibeRotAmount}}°</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.straightenEnable" ng-change="set(\'straightenEnable\', cfg.straightenEnable)" ng-disabled="locked"> Straighten at speed<span class="sc-tipsrc" ng-if="tips.straightenEnable">{{tips.straightenEnable}}</span><span class="sc-info" ng-if="tips.straightenEnable">&#9432;</span></label></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.straightenEnable}"><span>Straighten speed<span class="sc-tipsrc" ng-if="tips.straightenSpeed">{{tips.straightenSpeed}}</span><span class="sc-info" ng-if="tips.straightenSpeed">&#9432;</span></span>',
-            '<input type="range" min="20" max="400" step="5" ng-model="cfg.straightenSpeed" ng-change="set(\'straightenSpeed\', cfg.straightenSpeed)" ng-disabled="locked || !cfg.straightenEnable">',
-            '<b style="flex:0 0 64px">{{cfg.straightenSpeed}} km/h</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.velAim" ng-change="set(\'velAim\', cfg.velAim)" ng-disabled="locked"> Aim camera at velocity<span class="sc-tipsrc" ng-if="tips.velAim">{{tips.velAim}}</span><span class="sc-info" ng-if="tips.velAim">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.velAim}"><span>Influence<span class="sc-tipsrc" ng-if="tips.velAimInfluence">{{tips.velAimInfluence}}</span><span class="sc-info" ng-if="tips.velAimInfluence">&#9432;</span></span>',
+            '<input type="range" min="0" max="100" step="5" ng-model="cfg.velAimInfluence" ng-change="set(\'velAimInfluence\', cfg.velAimInfluence)" ng-disabled="locked || !cfg.velAim">',
+            '<b>{{cfg.velAimInfluence}}%</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.velAim}"><span>Anticipate<span class="sc-tipsrc" ng-if="tips.velAimAnticipate">{{tips.velAimAnticipate}}</span><span class="sc-info" ng-if="tips.velAimAnticipate">&#9432;</span></span>',
+            '<input type="range" min="0" max="1000" step="25" ng-model="cfg.velAimAnticipate" ng-change="set(\'velAimAnticipate\', cfg.velAimAnticipate)" ng-disabled="locked || !cfg.velAim">',
+            '<b>{{cfg.velAimAnticipate}}ms</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.velAim}"><span>Ramp speed<span class="sc-tipsrc" ng-if="tips.velAimRampSpeed">{{tips.velAimRampSpeed}}</span><span class="sc-info" ng-if="tips.velAimRampSpeed">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.velAimRampSpeed" ng-change="set(\'velAimRampSpeed\', cfg.velAimRampSpeed)" ng-disabled="locked || !cfg.velAim">',
+            '<b style="flex:0 0 64px">{{cfg.velAimRampSpeed}} km/h</b></div>',
         '</div>',
         '</div>',
 
@@ -353,7 +453,7 @@ angular.module('beamng.apps')
             '<label class="sc-set-chk"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Mirror settings on right-hand-drive cars<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span><span class="sc-info" ng-if="tips.mirror">&#9432;</span></label>',
             '<label class="sc-set-chk"><input type="checkbox" ng-model="notaryEnabled" ng-change="setNotary(notaryEnabled)"> Per-vehicle configs<span class="sc-tipsrc" ng-if="tips.notary">{{tips.notary}}</span><span class="sc-info" ng-if="tips.notary">&#9432;</span></label>',
             '<div class="sc-set-note" ng-if="notaryEnabled && vehKey">jbeam: <b style="color:#cfcfd4">{{vehKey}}</b></div>',
-            '<div class="sc-set-ver">SteerCam v{{version}}<br>Vibe coded by LarsGudm, with Claude Opus 4.8</div>',
+            '<div class="sc-set-ver">SteerCam v{{version}}</div>',
           '</div>',
         '</div>',
       '</div>'
@@ -375,10 +475,16 @@ angular.module('beamng.apps')
       scope.notaryEnabled = false;   // per-vehicle configs: each car remembers its own preset+tweaks
       scope.vehKey = '';             // current vehicle's jbeam name (shown in Settings when notary on)
       scope.settingsOpen = false;    // the Settings overlay
-      scope.version = '1.0';         // shown in Settings; replaced by the Lua value on load
+      scope.version = '1.1';         // shown in Settings; replaced by the Lua value on load
       // Hover hints (shown in the bottom hint bar). Add text to give a category/
       // control a hint, leave it '' for none. UI text only -- not per-preset, so it
       // lives here, not in the preset JSONs. Keyed by category id / setting name.
+      // The ignition-vibe tooltip states the shut-off/start amplitude ratio; the scale
+      // itself lives in Lua (steerCam.vibeStopScale), so load() rebuilds this from the
+      // real value -- the 0.25 here is only the pre-load fallback.
+      function vibeTip(stopScale) {
+        return 'Simulate the engine vibration with camera shake when turning ignition on and off. Starting shakes at the full Amount; shutting off is gentler, at ' + Math.round(stopScale * 100) + '% of it.';
+      }
       scope.tips = {
         modEnable: '',
         mirror: 'Settings describe a left-hand-drive seat. In right-hand-drive cars; camera pan, glance angle, etc. auto-mirror so it feels the same.',
@@ -409,7 +515,7 @@ angular.module('beamng.apps')
         glanceTransition: 'None = instant snap | Fixed time = same time for any angle | Constant speed = time scales with the angle, like turning your head at a steady rate (glance time = a full 180° turn).',
         glanceTime: '',
         glanceCurve: 'Easing curve for the glance animation (lerp).',
-        glanceFastEnable: 'Glances get quicker at speed.',
+        glanceFastEnable: '',
         glanceFastTime: '',
         glanceFastSpeed: '',
         glanceOffsetLeft: '',
@@ -425,14 +531,16 @@ angular.module('beamng.apps')
         vertInertiaMax: 'Max upward float (cm) when the car drops away or goes light.',
         vertSquishMax: 'Max downward squish (cm) under compression — landings, dips, kerbs.',
         vertInertiaSpeed: 'How fast the head moves toward its lifted/squished position. LOW = floaty and gradual (a brief moment of air only lifts partway; the longer you fall, the higher it climbs); HIGH = snappy, near-instant. This is the "transition" knob.',
-        engineVibe: 'Simulate the engine vibration with camera shake when turning ignition on and off.',
+        engineVibe: vibeTip(0.25),
         vibeAmount: '',
         vibeRotAmount: '',
-        speedVibe: 'Camera vibration that grows with speed.',
-        speedVibeAmount: '',
-        speedVibeSpeed: '',
-        straightenEnable: 'Center the camera "Rotate L/R" pan modifier (in Camera settings override) when driving at speed',
-        straightenSpeed: ''
+        speedRumble: 'Camera rumble that grows with speed.',
+        speedRumbleDistance: '',
+        speedRumbleSpeed: '',
+        velAim: 'At speed the camera aims toward your actual direction of travel (velocity), not just where the car points — so slides/drifts feel less bolted-on. Adds the slip/drift angle on top of the steering pan (nothing in clean grip, the full drift angle in a slide); tilt comes from the sideways slip.',
+        velAimInfluence: '',
+        velAimAnticipate: 'Look-ahead: uses acceleration to predict where the velocity vector is heading, so the aim leads slightly into corners (and dips early over crests) instead of trailing the vector. 0 = aim at the current vector.',
+        velAimRampSpeed: ''
       };
       // per-section twirl state; every section starts open (none collapsed)
       scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
@@ -527,10 +635,11 @@ angular.module('beamng.apps')
         scope.setNotary(scope.notaryEnabled);
       };
 
-      // "Save changes to this preset" is only valid on a non-protected preset that
-      // actually has unsaved tweaks -- otherwise it's hidden.
+      // "Save changes to this preset" shows whenever there are unsaved tweaks --
+      // shipped (protected) presets included: whoever saves owns the truth. The
+      // protected tag only guards delete now.
       scope.canSaveChanges = function () {
-        return scope.modified && !scope.protectedMap[scope.preset];
+        return scope.modified;
       };
 
       // open the presets folder in the OS file browser (find / share / hand-edit)
@@ -541,7 +650,7 @@ angular.module('beamng.apps')
       scope.cfg = {
         camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0, nearClip: 0.05,
         steerEnable: true,
-        angle: 18, reach: 35, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
+        angle: 18, reach: 100, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
         glanceEnable: true,
         glanceLeft: 115, glanceRight: 115, glanceBack: 0, glanceTime: 120, glanceCurve: 'Exponential', glanceTransition: 'Fixed time',
         glanceFastEnable: false, glanceFastTime: 60, glanceFastSpeed: 120,
@@ -550,8 +659,8 @@ angular.module('beamng.apps')
         vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160,
         rollSource: 'Steering', vertInertia: false, vertInertiaMax: 8, vertSquishMax: 8, vertInertiaSpeed: 4,
         engineVibe: false, vibeAmount: 0.2, vibeRotAmount: 0.15,
-        speedVibe: false, speedVibeAmount: 0.5, speedVibeSpeed: 200,
-        straightenEnable: false, straightenSpeed: 120
+        speedRumble: false, speedRumbleDistance: 0.5, speedRumbleSpeed: 200,
+        velAim: false, velAimInfluence: 40, velAimAnticipate: 200, velAimRampSpeed: 60
       };
 
       function pushOne(key, val) {
@@ -571,9 +680,16 @@ angular.module('beamng.apps')
       // reflect the LIVE glance (hold keybind > toggle keybind > UI preview) so the
       // Preview buttons highlight whenever a glance is active -- from ANY source --
       // and clear the instant it ends. Polled, so keybind glances update the UI too.
+      // grey-out heartbeat: steerCam._frame bumps every frame the SteerCam view is active.
+      // If it hasn't advanced since the last poll we're NOT in that view (tweaks invisible),
+      // so add .sc-inactive to the root -> grey title + grey panel ring.
+      var lastActiveFrame = -1;
       function syncGlance() {
         bngApi.engineLua('steerCam and steerCam.getGlanceState() or nil', function (st) {
           if (st && typeof st === 'object') {
+            var f = st.active || 0;
+            element[0].classList.toggle('sc-inactive', f === lastActiveFrame);
+            lastActiveFrame = f;
             scope.$applyAsync(function () {
               var s = st.hold || st.toggle || st.preview || 0;
               scope.glanceSide = (s === 1) ? 'left' : (s === -1) ? 'right' : (s === 2) ? 'back' : 'none';
@@ -632,7 +748,7 @@ angular.module('beamng.apps')
               // hasOwnProperty guard silently dropped any key cfg didn't already have --
               // that's why new sliders went blank after a reload). Skip only the meta
               // fields, which are applied to their own scope vars just below.
-              var SC_META = { preset: 1, modified: 1, modEnabled: 1, mirrorSeat: 1, notaryEnabled: 1, version: 1 };
+              var SC_META = { preset: 1, modified: 1, modEnabled: 1, mirrorSeat: 1, notaryEnabled: 1, version: 1, vibeStopScale: 1 };
               for (var k in cfg) {
                 if (!SC_META[k]) { scope.cfg[k] = cfg[k]; }
               }
@@ -642,6 +758,7 @@ angular.module('beamng.apps')
               if (typeof cfg.mirrorSeat === 'boolean') { scope.mirrorSeat = cfg.mirrorSeat; }
               if (typeof cfg.notaryEnabled === 'boolean') { scope.notaryEnabled = cfg.notaryEnabled; }
               if (cfg.version) { scope.version = cfg.version; }
+              if (typeof cfg.vibeStopScale === 'number') { scope.tips.engineVibe = vibeTip(cfg.vibeStopScale); }
               // (collapse state is left alone here so it persists across reloads/preset
               //  + car switches; it's initialised all-open where scope.collapsed is declared)
             });
@@ -665,7 +782,7 @@ angular.module('beamng.apps')
         });
       };
 
-      // Save changes to the current (non-protected) preset -- confirm, then bake in
+      // Save changes to the current preset (shipped/protected ones included) -- confirm, then bake in
       scope.saveChanges = function () {
         scope.openDD = null;
         var name = scope.preset;
@@ -703,15 +820,16 @@ angular.module('beamng.apps')
       };
 
       // dropdown "Save as new preset...": prompt for a name, then create -- or confirm
-      // an overwrite if it exists. Protected/reserved names are blocked. Spaces and
-      // accents are fine in the name (the filename gets slugified Lua-side).
+      // an overwrite if it exists (shipped presets included -- only "Custom" is
+      // reserved). Spaces and accents are fine in the name (the filename gets
+      // slugified Lua-side).
       scope.saveAsNew = function () {
         scope.openDD = null;
         scope.modal = { input: true, value: '', text: 'Name this preset:', yes: 'Save', action: function (val) {
           var name = (val || '').replace(/^\s+|\s+$/g, '');
           if (!name) { return; }
-          if (name === 'Custom' || scope.protectedMap[name]) {
-            scope.modal = { text: '"' + name + '" is protected. Pick another name.', yes: 'OK', action: null };
+          if (name === 'Custom') {
+            scope.modal = { text: '"Custom" is reserved. Pick another name.', yes: 'OK', action: null };
             return;
           }
           if (scope.presetNames.indexOf(name) !== -1) {
@@ -861,7 +979,16 @@ angular.module('beamng.apps')
 
       // poll the glance preview state so the Preview buttons un-highlight when a
       // glance keybind cancels the preview (Lua clears it; the UI can't know otherwise)
-      var glancePoll = setInterval(syncGlance, 200);
+      // Instant highlight: GE PUSHES 'SteerCamGlanceSide' the frame the active side changes
+      // (steercam.lua update()), so the negative/positive state flips WITH the camera instead
+      // of waiting for a poll tick. Costs nothing -- it only fires on a change, not per frame.
+      scope.$on('SteerCamGlanceSide', function (e, side) {
+        scope.$applyAsync(function () {
+          scope.glanceSide = (side === 1) ? 'left' : (side === -1) ? 'right' : (side === 2) ? 'back' : 'none';
+        });
+      });
+      // poll stays as a fallback (initial sync if the app opens mid-glance) + the grey-out heartbeat
+      var glancePoll = setInterval(syncGlance, 100);
       // poll the car notary so the panel follows vehicle switches (per-car configs)
       var notaryPoll = setInterval(syncNotary, 400);
       scope.$on('$destroy', function () {
@@ -881,6 +1008,19 @@ angular.module('beamng.apps')
         el.style.clipPath = clip;
         el.style.webkitClipPath = clip;
       });
+
+      // Responsive labels: below a width threshold the panel can't fit "name + slider +
+      // value" on one line, so hide the name text (.sc-look-txt) and let the type-glyph be
+      // the label. Driven by the panel's OWN width (ResizeObserver), not the viewport.
+      if (window.ResizeObserver) {
+        element[0].classList.add('sc-narrow');   // safe default until first measure
+        var sizeRO = new ResizeObserver(function (entries) {
+          var w = entries[0].contentRect.width;
+          element[0].classList.toggle('sc-narrow', w < 300);
+        });
+        sizeRO.observe(element[0]);
+        scope.$on('$destroy', function () { sizeRO.disconnect(); });
+      }
 
       element.ready(function () {
         load();
