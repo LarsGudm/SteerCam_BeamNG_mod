@@ -16,7 +16,19 @@
 
 if not steerCam then
   steerCam = {}
-  steerCam.version = "1.1"   -- shown in the Settings overlay; bump on release (keep app.json in sync)
+  -- Single source of truth for the version: the Settings overlay and any preset the mod
+  -- writes both take it from here. app.json is the one exception -- the game parses that
+  -- manifest itself, before any mod Lua runs, so it can't read this. Bump BOTH on release;
+  -- the check below catches a half-bump instead of letting it ship silently.
+  steerCam.version = "1.2"
+  do
+    local app = jsonReadFile and jsonReadFile("/ui/modules/apps/SteerCam/app.json")
+    local av = app and app.version
+    if av ~= nil and tostring(av) ~= steerCam.version then
+      log("W", "steercam", "version mismatch: steercam.lua says " .. steerCam.version ..
+          " but app.json says " .. tostring(av) .. " -- bump both before release")
+    end
+  end
   steerCam.vibeStopScale = 0.25   -- engine shut-OFF buzz amplitude as a fraction of the start; the UI tooltip reads this via getCfg
 
   local function getNum(k, d)
@@ -51,11 +63,11 @@ if not steerCam then
     glanceCurve = "Exponential", glanceTransition = "Fixed time",
     glanceFastEnable = false, glanceFastTime = 60.0, glanceFastSpeed = 120.0,
     speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
-    speedRoll = false, rollAngle = 5.0, speedRange = 160.0, rollSource = "Steering",
+    speedRoll = false, rollAngle = 5.0, rollThreshold = 160.0, rollSource = "Steering", vertigoThreshold = 160.0,
     vertInertia = false, vertInertiaMax = 8.0, vertSquishMax = 8.0, vertInertiaSpeed = 4.0,
     engineVibe = false, vibeAmount = 0.2, vibeRotAmount = 0.15,
     speedRumble = false, speedRumbleDistance = 0.5, speedRumbleSpeed = 200.0,
-    velAim = false, velAimInfluence = 40, velAimAnticipate = 200.0, velAimRampSpeed = 60.0,
+    speedPan = false, speedPanInfluence = 40, speedPanAnticipate = 200.0, speedPanRampSpeed = 60.0,
   }
 
   -- Setting metadata: numeric ranges (clamped), booleans, and string-valued keys.
@@ -71,23 +83,44 @@ if not steerCam then
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceBack = {-90, 90}, glanceTime = {0, 1000},
     glanceFastTime = {0, 1000}, glanceFastSpeed = {20, 400},
     glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5}, glanceOffsetBack = {-0.5, 0.5}, glanceBackRoll = {-15, 15},
-    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, speedRange = {20, 400},
+    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, rollThreshold = {20, 400}, vertigoThreshold = {20, 400},
     vertInertiaMax = {0, 30}, vertSquishMax = {0, 30}, vertInertiaSpeed = {1, 4},
     vibeAmount = {0, 0.5}, vibeRotAmount = {0, 1},
     speedRumbleDistance = {0, 2}, speedRumbleSpeed = {20, 400},
-    velAimInfluence = {0, 100}, velAimAnticipate = {0, 1000}, velAimRampSpeed = {20, 400},
+    speedPanInfluence = {0, 100}, speedPanAnticipate = {0, 1000}, speedPanRampSpeed = {20, 400},
   }
   local bools  = {
     speedFade = true, vertigo = true, speedRoll = true,
     camEnable = true, steerEnable = true, glanceEnable = true, speedModEnable = true,
     reverseSteer = true, vertInertia = true, engineVibe = true,
-    speedRumble = true, glanceFastEnable = true, velAim = true,
+    speedRumble = true, glanceFastEnable = true, speedPan = true,
   }
   local strs = { glanceCurve = true, glanceTransition = true, rollSource = true }   -- string-valued settings
   -- Toggles whose change should ALSO snap the steer-pan/reverse tween (see _snapNext
   -- in update()): only the steer group, so flipping an unrelated option can't hitch
   -- the pan mid-corner. (Numeric sliders never snap -- see steerCam.set.)
   local steerSnapKeys = { steerEnable = true, reverseSteer = true, speedFade = true }
+  -- Which eased smoothers a toggle owns, so flipping it snaps ONLY its own effect and
+  -- A/B testing one option can't jolt an unrelated one. A key missing here snaps nothing
+  -- (speedRumble, vertigo: no eased state of their own). spdSmooth is deliberately absent
+  -- everywhere -- it feeds roll/vertigo/pan/rumble alike, so no single toggle owns it; it
+  -- only snaps on the whole-config changes below, which set every group at once.
+  local snapGroups = {
+    speedRoll      = { roll = true },
+    rollSource     = { roll = true },
+    speedPan       = { pan  = true },
+    vertInertia    = { vert = true },
+    engineVibe     = { vibe = true },
+    speedModEnable = { roll = true, pan = true, vert = true, vibe = true },
+  }
+  -- Mark the groups a key owns as needing an instant apply next frame.
+  local function markSnap(key)
+    local g = snapGroups[key]
+    if not g then return end
+    local s = steerCam._snapNext
+    if type(s) ~= "table" then s = {}; steerCam._snapNext = s end
+    for name in pairs(g) do s[name] = true end
+  end
 
   -- Build a clean cfg from a decoded preset file: start from Default, then copy
   -- over any KNOWN key (correct type; numbers clamped to range). Unknown keys are
@@ -164,9 +197,6 @@ if not steerCam then
     steerCam.presetFiles  = fileOf
   end
   steerCam.loadPresets()
-
-  -- (The old editable "Custom" profile was removed: every preset is now editable via
-  --  the per-preset override layer below, so a separate scratch profile is redundant.)
 
   -- Edit model: a selected base preset + a sparse per-preset OVERRIDE layer (your live
   -- tweaks on top of it). Every preset is editable; tweaks are kept in
@@ -263,7 +293,7 @@ if not steerCam then
   steerCam.enabled = gbool(gFile.enabled, true)
   function steerCam.setEnabled(v)
     steerCam.enabled = (v == true or v == 1 or v == "true"); saveGlobals()
-    steerCam._snapNext = true; steerCam._snapSteer = true   -- re-enable applies instantly (A/B testing)
+    steerCam._snapNext = { all = true }; steerCam._snapSteer = true   -- re-enable applies instantly (A/B testing)
   end
 
   -- Driver-seat mirroring (default on). Saved values describe a LEFT-hand-drive seat
@@ -343,6 +373,18 @@ if not steerCam then
     end
   end
 
+  -- UI: open notary.json (the per-vehicle configs). It is never shipped, so a fresh
+  -- install has no car entries at all -- until the notary is switched on and a car is
+  -- driven, the file does not exist. Returns false in that case so the UI can say so
+  -- rather than opening something arbitrary.
+  function steerCam.openNotaryFile()
+    flushNotary()   -- commit any pending tweak so the file on disk is current
+    if not (FS and FS.fileExists and FS:fileExists(steerCam.notaryFile)) then return false end
+    if not (Engine and Engine.Platform and Engine.Platform.exploreFolder) then return false end
+    Engine.Platform.exploreFolder(steerCam.notaryFile)
+    return true
+  end
+
   -- UI: switch the active base preset. Updates the global lastPreset (it's an explicit
   -- pick). Notary off: per-preset overrides are preserved (return to a preset, see its
   -- tweaks). Notary on: the picked preset is this car's new selection, starting clean.
@@ -354,7 +396,7 @@ if not steerCam then
     if steerCam.notaryEnabled then steerCam.overrides = {} end   -- fresh preset on this car
     steerCam.applyCfg()
     persistActive()
-    steerCam._snapNext = true; steerCam._snapSteer = true   -- preset switch applies instantly
+    steerCam._snapNext = { all = true }; steerCam._snapSteer = true   -- preset switch applies instantly
   end
 
   -- Re-scan the presets folder at runtime (console: steerCam.reloadPresets()).
@@ -372,10 +414,10 @@ if not steerCam then
     "steerEnable", "angle", "reach", "stiffness", "reverseSteer", "reverseAngle", "reverseTime", "speedFade", "fadeSpeed", "fadeFloor",
     "glanceEnable", "glanceLeft", "glanceOffsetLeft", "glanceRight", "glanceOffsetRight", "glanceBack", "glanceOffsetBack", "glanceBackRoll",
     "glanceTransition", "glanceTime", "glanceCurve", "glanceFastEnable", "glanceFastTime", "glanceFastSpeed",
-    "speedModEnable", "vertigo", "vertigoFov", "vertigoDolly", "speedRoll", "rollAngle", "rollSource", "speedRange",
+    "speedModEnable", "vertigo", "vertigoFov", "vertigoDolly", "speedRoll", "rollAngle", "rollSource", "rollThreshold", "vertigoThreshold",
     "vertInertia", "vertInertiaMax", "vertSquishMax", "vertInertiaSpeed", "speedRumble", "speedRumbleDistance", "speedRumbleSpeed",
     "engineVibe", "vibeAmount", "vibeRotAmount",
-    "velAim", "velAimInfluence", "velAimAnticipate", "velAimRampSpeed",
+    "speedPan", "speedPanInfluence", "speedPanAnticipate", "speedPanRampSpeed",
   }
   local function encVal(v)
     local t = type(v)
@@ -406,7 +448,7 @@ if not steerCam then
   -- confirms first). ANY preset can be overwritten -- including the shipped
   -- Default/Dev's ones: whoever saves owns the truth (the write lands in the user
   -- folder, shadowing the mod's copy, so it also survives mod updates). "protected"
-  -- now only guards DELETE (and shows the lock glyph); it is preserved on re-save.
+  -- guards DELETE only (and shows the lock glyph); it is preserved on re-save.
   -- Only the reserved "Custom" name is refused. The display name lives in the JSON's
   -- "name" field; the filename is just a slug.
   function steerCam.savePreset(name)
@@ -459,7 +501,7 @@ if not steerCam then
       steerCam.overrides[name] = nil
       persistActive()
       steerCam.applyCfg()
-      steerCam._snapNext = true; steerCam._snapSteer = true   -- reset applies instantly
+      steerCam._snapNext = { all = true }; steerCam._snapSteer = true   -- reset applies instantly
     end
   end
 
@@ -505,10 +547,10 @@ if not steerCam then
     -- Toggles/dropdowns apply with NO easing next frame (A/B testing an effect at speed
     -- must be a hard state flip). Numeric sliders deliberately do NOT snap: a drag fires
     -- set() every tick, and per-tick snapping would hold the anti-jitter low-passes
-    -- (spdSmooth, velAim) open for the whole drag -- raw dune-chop straight to the view.
+    -- (spdSmooth, speedPan) open for the whole drag -- raw dune-chop straight to the view.
     -- A slider's target moves through its usual (fast) ease instead.
     if bools[key] or strs[key] then
-      steerCam._snapNext = true
+      markSnap(key)
       if steerSnapKeys[key] then steerCam._snapSteer = true end
     end
   end
@@ -646,10 +688,23 @@ if not steerCam then
 
   -- UI: read latched/held state so the app can highlight the active side. `preview`
   -- drives the Preview buttons and drops to 0 the moment a keybind is used.
+  -- Panel visibility. Session-only (never persisted) so a hidden panel can't survive a
+  -- restart and read as a broken mod. While the HUD layout editor is open the UI keeps
+  -- rendering the panel regardless -- it just retitles it -- so it stays placeable.
+  steerCam.panelHidden = false
+  function steerCam.togglePanel()
+    steerCam.panelHidden = not steerCam.panelHidden
+  end
+
   function steerCam.getGlanceState()
     local st = steerCam.glanceStack
     local hold = (#st > 0) and st[#st] or 0   -- top of the stack = the live held side
-    return { hold = hold, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview, active = steerCam._frame or 0 }
+    local editing = extensions and extensions.ui_appLayouts and extensions.ui_appLayouts.isEditing
+                    and extensions.ui_appLayouts.isEditing() or false
+    local key = core_input_bindings and core_input_bindings.getControlForAction
+                and core_input_bindings.getControlForAction("steercam_toggle_panel") or nil
+    return { hold = hold, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview, active = steerCam._frame or 0,
+             hidden = steerCam.panelHidden, editing = editing, panelKey = key }
   end
 end
 
@@ -816,14 +871,21 @@ return function(...)
     local dt = data.dt
     if dt < 1e-4 then dt = 1e-4 end
 
-    -- A setting just changed (UI toggle/slider, preset switch, mod re-enable): consume
-    -- the snap flags so every effect smoother jumps STRAIGHT to its current target this
-    -- frame instead of easing there. Flipping an option A/Bs the two states instantly --
-    -- that's what makes testing an effect at speed readable. snapSteer additionally
-    -- snaps the steer-pan + reverse tween, and is only set for steer-group changes so
-    -- scrubbing an unrelated slider can't hitch the pan mid-corner. (The glance tween
-    -- and the g-force low-passes are left alone: those are motion, not option easing.)
-    local snap = steerCam._snapNext == true
+    -- A setting just changed (UI toggle, preset switch, mod re-enable): consume the snap
+    -- flags so the affected smoothers jump STRAIGHT to their current target this frame
+    -- instead of easing there. Flipping an option A/Bs its two states instantly -- that's
+    -- what makes testing an effect at speed readable. Snapping is PER GROUP (snapGroups):
+    -- a toggle only snaps the effect it owns, so A/Bing one option never jolts another.
+    -- "all" is set by whole-config changes (preset/reset/re-enable), which legitimately
+    -- change everything at once and are the only thing that snaps the shared spdSmooth.
+    -- snapSteer additionally snaps the steer-pan + reverse tween for steer-group changes.
+    -- (The glance tween and the g-force low-passes are left alone: motion, not options.)
+    local sn = steerCam._snapNext
+    local snapAll   = type(sn) == "table" and sn.all == true
+    local snapRoll  = snapAll or (type(sn) == "table" and sn.roll == true)
+    local snapPan   = snapAll or (type(sn) == "table" and sn.pan  == true)
+    local snapVert  = snapAll or (type(sn) == "table" and sn.vert == true)
+    local snapVibe  = snapAll or (type(sn) == "table" and sn.vibe == true)
     local snapSteer = steerCam._snapSteer == true
     steerCam._snapNext, steerCam._snapSteer = nil, nil
 
@@ -835,9 +897,8 @@ return function(...)
     -- Driver-seat mirroring: recompute EVERY frame (cheap -- the stock driver cam
     -- calls getDriverData every frame too), so switching vehicles updates the
     -- mirror immediately with no Ctrl+L. RHD = the vehicle's onboard.driver camera
-    -- flag (same one the stock cam uses for look-back). Seat-node geometry was
-    -- unreliable (some cars centre the cam node); the earlier "mirrored an LHD car"
-    -- was a false alarm -- that car was actually RHD, so the flag had been right.
+    -- flag (same one the stock cam uses for look-back) -- NOT seat-node geometry,
+    -- which is unreliable because some cars centre the cam node.
     local rhd = false
     if data.veh ~= nil and core_camera and core_camera.getDriverData then
       local _, isRHD = core_camera.getDriverData(data.veh)
@@ -868,8 +929,8 @@ return function(...)
       end
       -- Orientation rebuild: re-aim (pan/tilt) AND set the roll/up. This runs
       -- whenever there's a vehicle, so the roll ALWAYS applies -- not only when a
-      -- pan/tilt value is set (that gating was why the bank + horizon slider "did
-      -- nothing" with yaw/pitch at 0, falling back to the stock world-up rotation).
+      -- pan/tilt value is set. Gating it on those would leave the bank + horizon
+      -- slider inert at yaw/pitch 0, falling back to the stock world-up rotation.
       -- Pan/tilt gimbal (tripod/turret): aim by azimuth (about WORLD up) + elevation
       -- (about the horizontal-right) -- up/down stays world-vertical, pan stays
       -- horizontal, independent, no curve. The rebuild's UP is the CAR's up (seat
@@ -1079,13 +1140,15 @@ return function(...)
     end
 
     -- ----- Immersive extras: FOV vertigo + corner roll + head inertia --------
-    -- Vertigo and steering-roll ramp to full strength as speed approaches speedRange
-    -- (shared ceiling); the inertia effects below use g-force instead of speedRange.
+    -- Vertigo and steering-roll each ramp to full strength as speed approaches their OWN
+    -- threshold; the inertia effects below use g-force and ignore both.
     -- Speed is low-passed so tyre scrub/surge can't jitter the roll or FOV.
     local spdRaw = (data.vel and data.vel:length()) or 0
-    self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * (snap and 1 or clamp01(dt * 3))
-    local sr = (c.speedRange or 160) / 3.6            -- km/h -> m/s ceiling
-    local speedFac = clamp01(self.spdSmooth / (sr > 0.1 and sr or 0.1))
+    self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * (snapAll and 1 or clamp01(dt * 3))
+    local vt = (c.vertigoThreshold or 160) / 3.6      -- km/h -> m/s ceiling
+    local vertigoFac = clamp01(self.spdSmooth / (vt > 0.1 and vt or 0.1))
+    local rt = (c.rollThreshold or 160) / 3.6
+    local rollFac = clamp01(self.spdSmooth / (rt > 0.1 and rt or 0.1))
     local modsOn = c.speedModEnable
 
     -- Inertia g-force: differentiate the car velocity into the felt LATERAL push
@@ -1115,7 +1178,7 @@ return function(...)
 
     if modsOn and c.vertigo and data.res.fov then
       local f0 = data.res.fov
-      local fovAdd = (c.vertigoFov or 0) * speedFac
+      local fovAdd = (c.vertigoFov or 0) * vertigoFac
       data.res.fov = f0 + fovAdd
       -- dolly-zoom ("vertigo"): push the camera forward on the same speed curve
       -- so a plane at vertigoDolly metres keeps its size while the FOV widens.
@@ -1141,11 +1204,11 @@ return function(...)
       if (c.rollSource or "Steering") == "Inertia" then
         rollInput = clampUnit(self.latAccLP / GFULL)      -- full lean at ~1 g lateral
       else
-        rollInput = clampUnit(steerRaw) * speedFac
+        rollInput = clampUnit(steerRaw) * rollFac
       end
       rollTarget = rad(c.rollAngle or 0) * rollInput
     end
-    self.rollCur = self.rollCur + (rollTarget - self.rollCur) * (snap and 1 or clamp01(dt * 6))
+    self.rollCur = self.rollCur + (rollTarget - self.rollCur) * (snapRoll and 1 or clamp01(dt * 6))
 
     -- vertical head inertia ("head lift"): the body lags the car's vertical motion --
     -- floating UP off the seat when the car drops away (cresting a rise, going light
@@ -1166,7 +1229,7 @@ return function(...)
     -- spring the head toward the target; vertInertiaSpeed sets how fast. LOW = floaty and
     -- gradual (a brief moment of air only lifts partway; the longer you fall the higher it
     -- climbs toward max), HIGH = snaps to the target almost instantly.
-    self.vertOff = self.vertOff + (vTarget - self.vertOff) * (snap and 1 or clamp01(dt * (c.vertInertiaSpeed or 9)))
+    self.vertOff = self.vertOff + (vTarget - self.vertOff) * (snapVert and 1 or clamp01(dt * (c.vertInertiaSpeed or 9)))
     if self.vertOff ~= 0 and data.veh ~= nil then
       gUp:set(data.veh:getDirectionVectorUp())
       gUp:setScaled(self.vertOff)
@@ -1201,7 +1264,7 @@ return function(...)
       if vid ~= nil then vibeState = steerCamVibe[vid] or 0 end
     end
     local vibeTarget = (vibeState == 1) and 1 or (vibeState == 2 and steerCam.vibeStopScale or 0)   -- start full, stop the vibeStopScale fraction
-    self.vibeEnv = self.vibeEnv + (vibeTarget - self.vibeEnv) * (snap and 1 or clamp01(dt * 14))
+    self.vibeEnv = self.vibeEnv + (vibeTarget - self.vibeEnv) * (snapVibe and 1 or clamp01(dt * 14))
     if self.vibeEnv > 0.001 and data.veh ~= nil then
       self.vibePhase = self.vibePhase + dt
       local t = self.vibePhase * 6.2831853       -- seconds -> radians
@@ -1211,25 +1274,26 @@ return function(...)
       data.res.pos:setAdd(gFwd)
     end
 
-    -- ----- Velocity aim ("Aim camera at velocity") ---------------------------
-    -- At speed, lean the AIM/tilt toward where the car is actually MOVING (velocity), not
-    -- just where it points -- so a sliding buggy doesn't feel bolted to the chassis. Pitch
-    -- servos toward the trajectory; yaw ADDS the slip angle on top of the steer-pan/glance
-    -- (additive, so it composes instead of fighting); roll leans into the lateral SLIP.
-    -- Anticipate (ms) aims at the
-    -- PREDICTED vector vel + accel*T instead of the current one: cornering accel is
-    -- centripetal (points into the turn), so the aim leads by however far the vector will
-    -- swing in the next T -- and over a crest (accel = gravity) it dips toward the
-    -- ballistic arc early. Scaled by influence% + a speed ramp, and low-passed so dune
-    -- chop / impacts don't snap the aim. Applied in the roll block below
-    -- (dyTgt/dpTgt -> smoothed velAimYaw/velAimPitch on gFwd; drTgt -> velAimRoll adds to totalRoll).
-    local dpTgt, dyTgt, drTgt = 0, 0, 0
-    if modsOn and c.velAim and data.vel ~= nil and data.veh ~= nil then
+    -- ----- Speed pan + tilt --------------------------------------------------
+    -- At speed, aim toward where the car is actually MOVING (velocity), not just where it
+    -- points -- so a sliding buggy doesn't feel bolted to the chassis. YAW + PITCH only:
+    -- NO ROLL, by design -- this effect never banks the view. Bank from lateral g lives
+    -- in Speed roll -> Roll source "Inertia" instead. Yaw ADDS the slip angle on top of
+    -- the steer-pan/glance, so it composes instead of fighting; pitch follows the
+    -- trajectory's elevation so the view rises over crests and drops into dips.
+    -- Anticipate (ms) aims at the PREDICTED vector vel + accel*T instead of the current
+    -- one: cornering accel is centripetal (points into the turn), so the aim leads by
+    -- however far the vector will swing in the next T -- and over a crest (accel =
+    -- gravity) it dips toward the ballistic arc early. Scaled by influence% + a speed
+    -- ramp, and low-passed so dune chop / impacts don't snap the aim. Applied in the roll
+    -- block below (dyTgt/dpTgt -> smoothed speedPanYaw/speedPanPitch on gFwd).
+    local dpTgt, dyTgt = 0, 0
+    if modsOn and c.speedPan and data.vel ~= nil and data.veh ~= nil then
       local sp = data.vel:length()
-      local ds = (c.velAimRampSpeed or 60) / 3.6
-      local infl = (c.velAimInfluence or 0) * 0.01 * clamp01(self.spdSmooth / (ds > 0.1 and ds or 0.1))
+      local ds = (c.speedPanRampSpeed or 60) / 3.6
+      local infl = (c.speedPanInfluence or 0) * 0.01 * clamp01(self.spdSmooth / (ds > 0.1 and ds or 0.1))
       if sp > 1.0 and infl > 0.001 then
-        local ant = (c.velAimAnticipate or 0) * 0.001            -- ms -> s of look-ahead
+        local ant = (c.speedPanAnticipate or 0) * 0.001            -- ms -> s of look-ahead
         gUp.x = data.vel.x + self.accLP.x * ant                  -- predicted velocity (world), temp
         gUp.y = data.vel.y + self.accLP.y * ant
         gUp.z = data.vel.z + self.accLP.z * ant
@@ -1237,9 +1301,10 @@ return function(...)
         if psp < 1.0 or gUp:dot(data.vel) <= 0 then              -- prediction collapsed (hard braking) -> use actual
           gUp:set(data.vel); psp = sp
         end
-        local inv = 1 / psp
+        -- Tilt = the trajectory's elevation vs the current aim's, so the view follows
+        -- the arc over crests and into dips. Anticipation makes it lead the arc.
         gFwd:set(data.res.rot * vecY)                              -- current aim (world), temp
-        dpTgt = (math.asin(clampUnit(gUp.z * inv)) - math.asin(clampUnit(gFwd.z))) * infl
+        dpTgt = (math.asin(clampUnit(gUp.z / psp)) - math.asin(clampUnit(gFwd.z))) * infl
         -- Yaw = the SLIP angle (predicted-velocity heading vs CAR heading), ADDED on top
         -- of whatever the steer-pan/glance already did this frame -- so it inherits the
         -- drift without fighting the other yaw sources. With no anticipation: ~0 in clean
@@ -1253,14 +1318,11 @@ return function(...)
           if d > math.pi then d = d - 6.2831853 elseif d < -math.pi then d = d + 6.2831853 end
           dyTgt = d * infl * clamp01(fwdSp * 0.33)                 -- full above ~11 km/h of forward motion
         end
-        gRight:setCross(gFwd, data.veh:getDirectionVectorUp()); gRight:normalize()
-        drTgt = clampUnit(data.vel:dot(gRight) / sp) * infl * rad(30)   -- slip lean stays on the ACTUAL vel (30deg ref at full)
       end
     end
-    local vaLP = snap and 1 or clamp01(dt * 5)
-    self.velAimPitch = (self.velAimPitch or 0) + (dpTgt - (self.velAimPitch or 0)) * vaLP
-    self.velAimYaw   = (self.velAimYaw   or 0) + (dyTgt - (self.velAimYaw   or 0)) * vaLP
-    self.velAimRoll  = (self.velAimRoll  or 0) + (drTgt - (self.velAimRoll  or 0)) * vaLP
+    local spLP = snapPan and 1 or clamp01(dt * 5)
+    self.speedPanPitch = (self.speedPanPitch or 0) + (dpTgt - (self.speedPanPitch or 0)) * spLP
+    self.speedPanYaw   = (self.speedPanYaw   or 0) + (dyTgt - (self.speedPanYaw   or 0)) * spLP
 
     -- ----- Final camera ROLL (single, additive) ------------------------------
     -- The third rotation axis. Yaw (L/R: steer + glance) and pitch (U/D: override)
@@ -1271,14 +1333,14 @@ return function(...)
     -- if the override is off -- rolled by the total about the look axis. No stock
     -- wobble, and the bank is recomputed fresh so it stays right even glancing 180
     -- back. Add another roll source later by just adding it into totalRoll.
-    local totalRoll = rad(self.poseRoll or 0) + (self.velAimRoll or 0)   -- glance head-tilt (blended) + velocity-aim slip-lean
+    local totalRoll = rad(self.poseRoll or 0)                -- glance head-tilt (blended)
     if modsOn and c.speedRoll then totalRoll = totalRoll - self.rollCur end   -- speed lean
-    if data.veh ~= nil and (c.camEnable or totalRoll ~= 0 or (self.velAimYaw or 0) ~= 0 or (self.velAimPitch or 0) ~= 0) then
+    if data.veh ~= nil and (c.camEnable or totalRoll ~= 0 or (self.speedPanYaw or 0) ~= 0 or (self.speedPanPitch or 0) ~= 0) then
       gFwd:set(data.res.rot * vecY)                            -- final look (aim + yaw)
-      if (self.velAimYaw or 0) ~= 0 then gFwd:set(quatFromAxisAngle(vecZup, self.velAimYaw) * gFwd) end   -- velocity-aim yaw (additive slip lead)
-      if (self.velAimPitch or 0) ~= 0 then                                 -- velocity-aim pitch (trajectory)
+      if (self.speedPanYaw or 0) ~= 0 then gFwd:set(quatFromAxisAngle(vecZup, self.speedPanYaw) * gFwd) end   -- speed-pan yaw (additive slip lead)
+      if (self.speedPanPitch or 0) ~= 0 then                                 -- speed-pan tilt (trajectory)
         gRight:setCross(gFwd, vecZup); gRight:normalize()
-        gFwd:set(quatFromAxisAngle(gRight, self.velAimPitch) * gFwd)
+        gFwd:set(quatFromAxisAngle(gRight, self.speedPanPitch) * gFwd)
       end
       if c.camEnable then
         gUp:set(data.veh:getDirectionVectorUp())              -- bank base = car/seat up

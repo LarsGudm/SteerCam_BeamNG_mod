@@ -1,0 +1,7 @@
+{
+  "displayName":"Keyboard",
+  "imagePack":"keyboard",
+  "bindings":[
+    {"control":"f3", "action":"steercam_toggle_panel"}
+  ]
+}

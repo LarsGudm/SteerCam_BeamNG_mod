@@ -1,4 +1,5 @@
 {
+"steercam_toggle_panel"        :{"cat":"camera", "ctx":"tlua", "onDown":"if steerCam then steerCam.togglePanel() end", "title":"SteerCam - Hide/show settings panel", "desc":"Toggle the SteerCam settings panel on screen (stays visible while editing the HUD layout)"},
 // SteerCam blind-spot glance. Bind these in Options -> Controls -> Bindings (Camera).
 // ctx "tlua" runs the handler in the GE VM, where the steerCam table lives.
 "steercam_glance_left"        :{"cat":"camera", "ctx":"tlua", "onDown":"if steerCam then steerCam.glanceHold('left', true) end",  "onUp":"if steerCam then steerCam.glanceHold('left', false) end",  "title":"SteerCam - Glance left (hold)",   "desc":"Hold to glance toward the left blind spot"},

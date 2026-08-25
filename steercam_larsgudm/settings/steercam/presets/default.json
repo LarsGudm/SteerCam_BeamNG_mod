@@ -38,10 +38,15 @@
   "vertigo": false,
   "vertigoFov": 12,
   "vertigoDolly": 0.3,
+  "vertigoThreshold": 160,
   "speedRoll": false,
   "rollAngle": 5,
   "rollSource": "Steering",
-  "speedRange": 160,
+  "rollThreshold": 160,
+  "speedPan": false,
+  "speedPanInfluence": 40,
+  "speedPanAnticipate": 200,
+  "speedPanRampSpeed": 60,
   "vertInertia": false,
   "vertInertiaMax": 8,
   "vertSquishMax": 8,
@@ -51,10 +56,5 @@
   "speedRumbleSpeed": 200,
   "engineVibe": false,
   "vibeAmount": 0.2,
-  "vibeRotAmount": 0.15,
-  "velAim": false,
-  "velAimInfluence": 40,
-  "velAimAnticipate": 200,
-  "velAimRampSpeed": 60,
-  "version": "1.1"
+  "vibeRotAmount": 0.15
 }

@@ -32,6 +32,11 @@ angular.module('beamng.apps')
             '.steerCamApp.sc-inactive .sc-row>span{color:#9a9aa0}',
           '.steerCamApp.sc-inactive .sc-look-on,.steerCamApp.sc-inactive .sc-glance-btns button.active{background:#8a8a90}',
           '.steerCamApp .sc-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex:0 0 auto}',
+          // hidden by the toggle key: the whole panel stops rendering. The directive stays
+          // alive (display:none doesn't kill the scope), so the poll still sees the unhide.
+          '.steerCamApp.sc-hidden{display:none}',
+          '.steerCamApp .sc-title-hidden{color:#9a9aa0}',
+          '.steerCamApp .sc-hidehint{font-size:10px;color:#7a7a80;margin:-3px 0 7px;flex:0 0 auto}',
           '.steerCamApp .sc-mod-en{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#9a9aa0;cursor:pointer}',
           '.steerCamApp .sc-mod-en input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-mirror{display:flex;align-items:center;gap:7px;margin:0 0 8px;font-size:11px;color:#cfcfd4;cursor:pointer}',
@@ -181,15 +186,16 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-dd-sep{height:1px;background:rgba(255,255,255,0.15);margin:3px 0}',
           '.steerCamApp .sc-dd-save{color:#ffae6b}',
           '.steerCamApp .sc-dd-save:hover{background:rgba(255,122,24,0.18)}',
-          // current-selection text in the dropdown head + the "(modified)" tag + Reset
+          // current-selection text in the dropdown head + the "(modified)" tag
           '.steerCamApp .sc-dd-cur{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}',
           '.steerCamApp .sc-mod-tag{color:#ffae6b;font-size:10px}',
           // on the highlighted (orange) dropdown row the tag inverts to black too, so
           // "(modified)" stays legible instead of orange-on-orange noise
           '.steerCamApp .sc-dd-opt.active .sc-mod-tag{color:#161616}',
-          '.steerCamApp .sc-reset-btn{flex:0 0 auto;background:rgba(255,255,255,0.08);color:#ffae6b;',
-            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:4px 9px;font-size:11px;cursor:pointer}',
-          '.steerCamApp .sc-reset-btn:hover{background:rgba(255,255,255,0.16)}',
+          // Save/Reset stay in the list at all times and dim when unavailable, so the
+          // dropdown never changes height while you tweak. pointer-events:none is what
+          // actually blocks the click (the ng-click handlers also guard, belt+braces).
+          '.steerCamApp .sc-dd-disabled{opacity:0.35;pointer-events:none}',
           // red confirm button for destructive actions (delete)
           '.steerCamApp .sc-confirm-btns .yes.danger{background:#c0392b;border-color:#c0392b;color:#fff}',
           // text input reused by the save-as / overwrite modal
@@ -197,7 +203,8 @@ angular.module('beamng.apps')
             'color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 7px;font-size:12px}',
           '.steerCamApp .sc-preset-name::placeholder{color:#7a7a80}',
           // in-panel confirm overlay (overwrite / delete)
-          '.steerCamApp .sc-confirm{position:absolute;inset:0;z-index:200;display:flex;align-items:center;',
+          // above .sc-settings (300) -- the Settings overlay can raise a modal itself
+          '.steerCamApp .sc-confirm{position:absolute;inset:0;z-index:400;display:flex;align-items:center;',
             'justify-content:center;background:rgba(0,0,0,0.55);border-radius:7px}',
           '.steerCamApp .sc-confirm-box{background:#1c1c20;border:1px solid rgba(255,255,255,0.2);',
             'border-radius:6px;padding:12px 14px;max-width:240px;text-align:center}',
@@ -225,17 +232,22 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-set-chk{display:flex;align-items:center;gap:7px;font-size:11px;color:#cfcfd4;cursor:pointer;margin:9px 0 0}',
           '.steerCamApp .sc-set-chk input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-set-note{font-size:10px;color:#9a9aa0;margin:3px 0 4px 22px}',
+          // full-width utility button in the Settings overlay (opens the notary file)
+          '.steerCamApp .sc-set-btn{width:100%;margin-top:11px;background:rgba(255,255,255,0.08);color:#ffae6b;',
+            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 0;font-size:11px;cursor:pointer}',
+          '.steerCamApp .sc-set-btn:hover{background:rgba(255,122,24,0.18)}',
           '.steerCamApp .sc-set-ver{font-size:10px;color:#7a7a80;border-top:1px solid rgba(255,255,255,0.12);',
             'margin-top:10px;padding-top:8px;text-align:center}',
         '</style>',
 
         '<div class="sc-title-row">',
-          '<span class="sc-title">SteerCam</span>',
+          '<span class="sc-title" ng-class="{\'sc-title-hidden\': panelHidden}">SteerCam<span ng-if="panelHidden"> (HIDDEN)</span></span>',
           '<div class="sc-hdr-right">',
             '<button class="sc-gear" ng-click="openSettings()" title="Settings">&#9881;&#65038;</button>',
             '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Mod enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
           '</div>',
         '</div>',
+        '<div class="sc-hidehint">Press {{panelKeyLabel}} to hide/unhide panel.</div>',
 
         '<div class="sc-presets-row">',
           '<span class="sc-presets-lbl">Presets</span>',
@@ -248,12 +260,12 @@ angular.module('beamng.apps')
                 '<span class="sc-del-x" ng-if="canDelete(p)" ng-click="$event.stopPropagation(); askDeletePreset(p)" title="Delete preset">&#215;</span>',
               '</div>',
               '<div class="sc-dd-sep"></div>',
-              '<div class="sc-dd-opt sc-dd-save" ng-if="canSaveChanges()" ng-click="saveChanges()">&#10003; Save changes to this preset</div>',
+              '<div class="sc-dd-opt sc-dd-save" ng-class="{\'sc-dd-disabled\': !canSaveChanges()}" ng-click="saveChanges()">&#10003; Save changes to this preset</div>',
+              '<div class="sc-dd-opt sc-dd-save" ng-class="{\'sc-dd-disabled\': !modified}" ng-click="resetChanges()" title="Discard changes (back to the saved preset)">&#8634; Reset changes</div>',
               '<div class="sc-dd-opt sc-dd-save" ng-click="saveAsNew()">+ Save as new preset…</div>',
               '<div class="sc-dd-opt sc-dd-save" ng-click="openPresetFolder()">Open preset folder…</div>',
             '</div>',
           '</div>',
-          '<button class="sc-reset-btn" ng-if="modified" ng-click="resetChanges()" title="Discard changes (back to the saved preset)">Reset</button>',
         '</div>',
 
         // only the categories scroll; the title + presets rows above stay pinned
@@ -294,7 +306,7 @@ angular.module('beamng.apps')
           '<div class="sc-row"><span>Stiffness<span class="sc-tipsrc" ng-if="tips.stiffness">{{tips.stiffness}}</span><span class="sc-info" ng-if="tips.stiffness">&#9432;</span></span>',
             '<input type="range" min="1" max="40" step="1" ng-model="cfg.stiffness" ng-change="set(\'stiffness\', cfg.stiffness)" ng-disabled="locked">',
             '<b>{{cfg.stiffness}}</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.reverseSteer" ng-change="set(\'reverseSteer\', cfg.reverseSteer)" ng-disabled="locked"> Mirror turn direction when reversing<span class="sc-tipsrc" ng-if="tips.reverseSteer">{{tips.reverseSteer}}</span><span class="sc-info" ng-if="tips.reverseSteer">&#9432;</span></label></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.reverseSteer" ng-change="set(\'reverseSteer\', cfg.reverseSteer)" ng-disabled="locked"> Look opposite direction when reversing <span class="sc-tipsrc" ng-if="tips.reverseSteer">{{tips.reverseSteer}}</span><span class="sc-info" ng-if="tips.reverseSteer">&#9432;</span></label></div>',
           '<div class="sc-row" ng-show="cfg.reverseSteer"><span>Reverse angle<span class="sc-tipsrc" ng-if="tips.reverseAngle">{{tips.reverseAngle}}</span><span class="sc-info" ng-if="tips.reverseAngle">&#9432;</span></span>',
             '<input type="range" min="0" max="90" step="1" ng-model="cfg.reverseAngle" ng-change="set(\'reverseAngle\', cfg.reverseAngle)" ng-disabled="locked">',
             '<b>{{cfg.reverseAngle}}°</b></div>',
@@ -386,6 +398,9 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>Dolly depth<span class="sc-tipsrc" ng-if="tips.vertigoDolly">{{tips.vertigoDolly}}</span><span class="sc-info" ng-if="tips.vertigoDolly">&#9432;</span></span>',
             '<input type="range" min="0" max="1.5" step="0.01" ng-model="cfg.vertigoDolly" ng-change="set(\'vertigoDolly\', cfg.vertigoDolly)" ng-disabled="locked || !cfg.vertigo">',
             '<b>{{cfg.vertigoDolly}}m</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertigo}"><span>Speed threshold<span class="sc-tipsrc" ng-if="tips.vertigoThreshold">{{tips.vertigoThreshold}}</span><span class="sc-info" ng-if="tips.vertigoThreshold">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.vertigoThreshold" ng-change="set(\'vertigoThreshold\', cfg.vertigoThreshold)" ng-disabled="locked || !cfg.vertigo">',
+            '<b style="flex:0 0 64px">{{cfg.vertigoThreshold}} km/h</b></div>',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedRoll" ng-change="set(\'speedRoll\', cfg.speedRoll)" ng-disabled="locked"> Speed camera roll<span class="sc-tipsrc" ng-if="tips.speedRoll">{{tips.speedRoll}}</span><span class="sc-info" ng-if="tips.speedRoll">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll change<span class="sc-tipsrc" ng-if="tips.rollAngle">{{tips.rollAngle}}</span><span class="sc-info" ng-if="tips.rollAngle">&#9432;</span></span>',
             '<input type="range" min="0" max="20" step="0.5" ng-model="cfg.rollAngle" ng-change="set(\'rollAngle\', cfg.rollAngle)" ng-disabled="locked || !cfg.speedRoll">',
@@ -397,9 +412,21 @@ angular.module('beamng.apps')
                 '<div class="sc-dd-opt" ng-repeat="o in rollSourceOptions" ng-class="{active: cfg.rollSource===o.k}" ng-click="setRollSource(o.k); openDD=null">{{o.l}}</div>',
               '</div>',
             '</div></div>',
-          '<div class="sc-row"><span>Speed range<span class="sc-tipsrc" ng-if="tips.speedRange">{{tips.speedRange}}</span><span class="sc-info" ng-if="tips.speedRange">&#9432;</span></span>',
-            '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedRange" ng-change="set(\'speedRange\', cfg.speedRange)" ng-disabled="locked">',
-            '<b style="flex:0 0 64px">{{cfg.speedRange}} km/h</b></div>',
+          // dead under Inertia: that source reads lateral g, which already scales with
+          // speed, so there is no ramp to set. Dim + disable so it doesn't look live.
+          '<div class="sc-row" ng-class="{\'sc-dim\': !cfg.speedRoll || cfg.rollSource === \'Inertia\'}"><span>Speed threshold<span class="sc-tipsrc" ng-if="tips.rollThreshold">{{tips.rollThreshold}}</span><span class="sc-info" ng-if="tips.rollThreshold">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.rollThreshold" ng-change="set(\'rollThreshold\', cfg.rollThreshold)" ng-disabled="locked || !cfg.speedRoll || cfg.rollSource === \'Inertia\'">',
+            '<b style="flex:0 0 64px">{{cfg.rollThreshold}} km/h</b></div>',
+          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedPan" ng-change="set(\'speedPan\', cfg.speedPan)" ng-disabled="locked"> Speed pan + tilt<span class="sc-tipsrc" ng-if="tips.speedPan">{{tips.speedPan}}</span><span class="sc-info" ng-if="tips.speedPan">&#9432;</span></label></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedPan}"><span>Influence<span class="sc-tipsrc" ng-if="tips.speedPanInfluence">{{tips.speedPanInfluence}}</span><span class="sc-info" ng-if="tips.speedPanInfluence">&#9432;</span></span>',
+            '<input type="range" min="0" max="100" step="5" ng-model="cfg.speedPanInfluence" ng-change="set(\'speedPanInfluence\', cfg.speedPanInfluence)" ng-disabled="locked || !cfg.speedPan">',
+            '<b>{{cfg.speedPanInfluence}}%</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedPan}"><span>Anticipate<span class="sc-tipsrc" ng-if="tips.speedPanAnticipate">{{tips.speedPanAnticipate}}</span><span class="sc-info" ng-if="tips.speedPanAnticipate">&#9432;</span></span>',
+            '<input type="range" min="0" max="1000" step="25" ng-model="cfg.speedPanAnticipate" ng-change="set(\'speedPanAnticipate\', cfg.speedPanAnticipate)" ng-disabled="locked || !cfg.speedPan">',
+            '<b>{{cfg.speedPanAnticipate}}ms</b></div>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedPan}"><span>Speed threshold<span class="sc-tipsrc" ng-if="tips.speedPanRampSpeed">{{tips.speedPanRampSpeed}}</span><span class="sc-info" ng-if="tips.speedPanRampSpeed">&#9432;</span></span>',
+            '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedPanRampSpeed" ng-change="set(\'speedPanRampSpeed\', cfg.speedPanRampSpeed)" ng-disabled="locked || !cfg.speedPan">',
+            '<b style="flex:0 0 64px">{{cfg.speedPanRampSpeed}} km/h</b></div>',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.vertInertia" ng-change="set(\'vertInertia\', cfg.vertInertia)" ng-disabled="locked"> Head lift (vertical inertia)<span class="sc-tipsrc" ng-if="tips.vertInertia">{{tips.vertInertia}}</span><span class="sc-info" ng-if="tips.vertInertia">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.vertInertia}"><span>Max lift<span class="sc-tipsrc" ng-if="tips.vertInertiaMax">{{tips.vertInertiaMax}}</span><span class="sc-info" ng-if="tips.vertInertiaMax">&#9432;</span></span>',
             '<input type="range" min="0" max="30" step="0.5" ng-model="cfg.vertInertiaMax" ng-change="set(\'vertInertiaMax\', cfg.vertInertiaMax)" ng-disabled="locked || !cfg.vertInertia">',
@@ -414,7 +441,7 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRumble}"><span>Rumble distance<span class="sc-tipsrc" ng-if="tips.speedRumbleDistance">{{tips.speedRumbleDistance}}</span><span class="sc-info" ng-if="tips.speedRumbleDistance">&#9432;</span></span>',
             '<input type="range" min="0" max="2" step="0.01" ng-model="cfg.speedRumbleDistance" ng-change="set(\'speedRumbleDistance\', cfg.speedRumbleDistance)" ng-disabled="locked || !cfg.speedRumble">',
             '<b>{{cfg.speedRumbleDistance | number:2}}mm</b></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRumble}"><span>Rumble speed<span class="sc-tipsrc" ng-if="tips.speedRumbleSpeed">{{tips.speedRumbleSpeed}}</span><span class="sc-info" ng-if="tips.speedRumbleSpeed">&#9432;</span></span>',
+          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRumble}"><span>Speed threshold<span class="sc-tipsrc" ng-if="tips.speedRumbleSpeed">{{tips.speedRumbleSpeed}}</span><span class="sc-info" ng-if="tips.speedRumbleSpeed">&#9432;</span></span>',
             '<input type="range" min="20" max="400" step="5" ng-model="cfg.speedRumbleSpeed" ng-change="set(\'speedRumbleSpeed\', cfg.speedRumbleSpeed)" ng-disabled="locked || !cfg.speedRumble">',
             '<b style="flex:0 0 64px">{{cfg.speedRumbleSpeed}} km/h</b></div>',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.engineVibe" ng-change="set(\'engineVibe\', cfg.engineVibe)" ng-disabled="locked"> Engine ignition vibration<span class="sc-tipsrc" ng-if="tips.engineVibe">{{tips.engineVibe}}</span><span class="sc-info" ng-if="tips.engineVibe">&#9432;</span></label></div>',
@@ -424,16 +451,6 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.engineVibe}"><span>Rotation amount<span class="sc-tipsrc" ng-if="tips.vibeRotAmount">{{tips.vibeRotAmount}}</span><span class="sc-info" ng-if="tips.vibeRotAmount">&#9432;</span></span>',
             '<input type="range" min="0" max="1" step="0.01" ng-model="cfg.vibeRotAmount" ng-change="set(\'vibeRotAmount\', cfg.vibeRotAmount)" ng-disabled="locked || !cfg.engineVibe">',
             '<b>{{cfg.vibeRotAmount}}°</b></div>',
-          '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.velAim" ng-change="set(\'velAim\', cfg.velAim)" ng-disabled="locked"> Aim camera at velocity<span class="sc-tipsrc" ng-if="tips.velAim">{{tips.velAim}}</span><span class="sc-info" ng-if="tips.velAim">&#9432;</span></label></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.velAim}"><span>Influence<span class="sc-tipsrc" ng-if="tips.velAimInfluence">{{tips.velAimInfluence}}</span><span class="sc-info" ng-if="tips.velAimInfluence">&#9432;</span></span>',
-            '<input type="range" min="0" max="100" step="5" ng-model="cfg.velAimInfluence" ng-change="set(\'velAimInfluence\', cfg.velAimInfluence)" ng-disabled="locked || !cfg.velAim">',
-            '<b>{{cfg.velAimInfluence}}%</b></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.velAim}"><span>Anticipate<span class="sc-tipsrc" ng-if="tips.velAimAnticipate">{{tips.velAimAnticipate}}</span><span class="sc-info" ng-if="tips.velAimAnticipate">&#9432;</span></span>',
-            '<input type="range" min="0" max="1000" step="25" ng-model="cfg.velAimAnticipate" ng-change="set(\'velAimAnticipate\', cfg.velAimAnticipate)" ng-disabled="locked || !cfg.velAim">',
-            '<b>{{cfg.velAimAnticipate}}ms</b></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.velAim}"><span>Ramp speed<span class="sc-tipsrc" ng-if="tips.velAimRampSpeed">{{tips.velAimRampSpeed}}</span><span class="sc-info" ng-if="tips.velAimRampSpeed">&#9432;</span></span>',
-            '<input type="range" min="20" max="400" step="5" ng-model="cfg.velAimRampSpeed" ng-change="set(\'velAimRampSpeed\', cfg.velAimRampSpeed)" ng-disabled="locked || !cfg.velAim">',
-            '<b style="flex:0 0 64px">{{cfg.velAimRampSpeed}} km/h</b></div>',
         '</div>',
         '</div>',
 
@@ -442,7 +459,7 @@ angular.module('beamng.apps')
             '<div class="sc-confirm-text">{{modal.text}}</div>',
             '<input ng-if="modal.input" class="sc-preset-name sc-modal-input" type="text" ng-model="modal.value" placeholder="Preset name" ng-keydown="$event.keyCode===13 && modalYes()">',
             '<div class="sc-confirm-btns">',
-              '<button ng-click="modalNo()">Cancel</button>',
+              '<button ng-if="!modal.info" ng-click="modalNo()">Cancel</button>',   // info modals are OK-only
               '<button class="yes" ng-class="{danger:modal.danger}" ng-click="modalYes()">{{modal.yes}}</button>',
             '</div>',
           '</div>',
@@ -453,7 +470,8 @@ angular.module('beamng.apps')
             '<label class="sc-set-chk"><input type="checkbox" ng-model="mirrorSeat" ng-change="setMirror(mirrorSeat)"> Mirror settings on right-hand-drive cars<span class="sc-tipsrc" ng-if="tips.mirror">{{tips.mirror}}</span><span class="sc-info" ng-if="tips.mirror">&#9432;</span></label>',
             '<label class="sc-set-chk"><input type="checkbox" ng-model="notaryEnabled" ng-change="setNotary(notaryEnabled)"> Per-vehicle configs<span class="sc-tipsrc" ng-if="tips.notary">{{tips.notary}}</span><span class="sc-info" ng-if="tips.notary">&#9432;</span></label>',
             '<div class="sc-set-note" ng-if="notaryEnabled && vehKey">jbeam: <b style="color:#cfcfd4">{{vehKey}}</b></div>',
-            '<div class="sc-set-ver">SteerCam v{{version}}</div>',
+            '<button class="sc-set-btn" ng-click="openNotaryFile()" title="Open notary.json -- the per-vehicle configs, one entry per car">Open per-vehicle config file…</button>',
+            '<div class="sc-set-ver" ng-if="version">SteerCam v{{version}}</div>',
           '</div>',
         '</div>',
       '</div>'
@@ -475,7 +493,9 @@ angular.module('beamng.apps')
       scope.notaryEnabled = false;   // per-vehicle configs: each car remembers its own preset+tweaks
       scope.vehKey = '';             // current vehicle's jbeam name (shown in Settings when notary on)
       scope.settingsOpen = false;    // the Settings overlay
-      scope.version = '1.1';         // shown in Settings; replaced by the Lua value on load
+      scope.panelHidden = false;      // hide-key state; panel still renders while the HUD layout editor is open
+      scope.panelKeyLabel = 'F3';     // replaced by the real binding on the first poll
+      scope.version = '';           // filled from steerCam.version on load -- never hardcode it here
       // Hover hints (shown in the bottom hint bar). Add text to give a category/
       // control a hint, leave it '' for none. UI text only -- not per-preset, so it
       // lives here, not in the preset JSONs. Keyed by category id / setting name.
@@ -504,11 +524,11 @@ angular.module('beamng.apps')
         angle: '',
         reach: 'How much steering input is needed before reaching the full angle.',
         stiffness: 'How quickly the camera moves. Higher = snappier.',
-        reverseSteer: 'While reversing, mirror the turn the other way.',
+        reverseSteer: 'While reversing, mirror the steering headturn to look the other direction. Make you look where you\'re going when going backwards! (recommended)',
         reverseAngle: '',
         reverseTime: 'How slowly camera eases between forward and reverse steering angle. Determined by movement vector and gear.',
         speedFade: 'Scale the camera pan by speed: none when stopped, full by Fade speed.',
-        fadeSpeed: 'Speed at which the camera pan reaches full strength.',
+        fadeSpeed: 'Speed at which the effect reaches full strength.',
         fadeFloor: 'How much of the camera pan is kept even at a standstill. 0 = none until moving.',
         glanceLeft: '',
         glanceRight: '',
@@ -526,7 +546,8 @@ angular.module('beamng.apps')
         speedRoll: 'Simulate leaning your head into corners at speed via camera roll.',
         rollSource: 'Steering = steering input | Inertia = from real lateral g-force (full effect at ~1g)',
         rollAngle: '',
-        speedRange: '',
+        rollThreshold: 'Speed at which the effect reaches full strength.',
+        vertigoThreshold: 'Speed at which the effect reaches full strength.',
         vertInertia: 'Driver lifts off the seat when the car is airborne and sinks under compression.',
         vertInertiaMax: 'Max upward float (cm) when the car drops away or goes light.',
         vertSquishMax: 'Max downward squish (cm) under compression — landings, dips, kerbs.',
@@ -536,11 +557,11 @@ angular.module('beamng.apps')
         vibeRotAmount: '',
         speedRumble: 'Camera rumble that grows with speed.',
         speedRumbleDistance: '',
-        speedRumbleSpeed: '',
-        velAim: 'At speed the camera aims toward your actual direction of travel (velocity), not just where the car points — so slides/drifts feel less bolted-on. Adds the slip/drift angle on top of the steering pan (nothing in clean grip, the full drift angle in a slide); tilt comes from the sideways slip.',
-        velAimInfluence: '',
-        velAimAnticipate: 'Look-ahead: uses acceleration to predict where the velocity vector is heading, so the aim leads slightly into corners (and dips early over crests) instead of trailing the vector. 0 = aim at the current vector.',
-        velAimRampSpeed: ''
+        speedRumbleSpeed: 'Speed at which the effect reaches full strength.',
+        speedPan: 'At speed the camera pans and tilts toward your actual direction of travel, not just where the car points — so slides and drifts feel less bolted-on.',
+        speedPanInfluence: '',
+        speedPanAnticipate: 'Look-ahead: uses acceleration to predict where the velocity vector is heading, so the aim leads slightly into corners (and dips early over crests). 0 = aim at the current vector.',
+        speedPanRampSpeed: 'Speed at which the effect reaches full strength.'
       };
       // per-section twirl state; every section starts open (none collapsed)
       scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
@@ -635,9 +656,9 @@ angular.module('beamng.apps')
         scope.setNotary(scope.notaryEnabled);
       };
 
-      // "Save changes to this preset" shows whenever there are unsaved tweaks --
+      // "Save changes to this preset" is live whenever there are unsaved tweaks --
       // shipped (protected) presets included: whoever saves owns the truth. The
-      // protected tag only guards delete now.
+      // protected tag guards delete only.
       scope.canSaveChanges = function () {
         return scope.modified;
       };
@@ -646,6 +667,18 @@ angular.module('beamng.apps')
       scope.openPresetFolder = function () {
         scope.openDD = null;
         bngApi.engineLua('if steerCam then steerCam.openPresetFolder() end');
+      };
+
+      // open notary.json -- the per-vehicle configs. Never shipped, so on a fresh install
+      // the file does not exist until the notary is on and a car has been driven; Lua
+      // returns false in that case and we say so instead of opening anything.
+      scope.openNotaryFile = function () {
+        bngApi.engineLua('steerCam and steerCam.openNotaryFile() or false', function (ok) {
+          if (ok) { return; }
+          scope.$evalAsync(function () {
+            scope.modal = { info: true, yes: 'OK', text: 'No notary found. Turn on "Per-vehicle configs" and drive a car -- the file is written the first time a car gets its own entry.' };
+          });
+        });
       };
       scope.cfg = {
         camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0, nearClip: 0.05,
@@ -656,11 +689,11 @@ angular.module('beamng.apps')
         glanceFastEnable: false, glanceFastTime: 60, glanceFastSpeed: 120,
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10, glanceOffsetBack: 0, glanceBackRoll: 0,
         speedModEnable: true,
-        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, speedRange: 160,
+        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, rollThreshold: 160, vertigoThreshold: 160,
         rollSource: 'Steering', vertInertia: false, vertInertiaMax: 8, vertSquishMax: 8, vertInertiaSpeed: 4,
         engineVibe: false, vibeAmount: 0.2, vibeRotAmount: 0.15,
         speedRumble: false, speedRumbleDistance: 0.5, speedRumbleSpeed: 200,
-        velAim: false, velAimInfluence: 40, velAimAnticipate: 200, velAimRampSpeed: 60
+        speedPan: false, speedPanInfluence: 40, speedPanAnticipate: 200, speedPanRampSpeed: 60
       };
 
       function pushOne(key, val) {
@@ -690,9 +723,16 @@ angular.module('beamng.apps')
             var f = st.active || 0;
             element[0].classList.toggle('sc-inactive', f === lastActiveFrame);
             lastActiveFrame = f;
+            // Hidden stops the panel rendering -- EXCEPT while the HUD layout editor is
+            // open, where it stays put (retitled "(HIDDEN)") so it can still be placed.
+            // classList, not ng-class: sc-inactive above shares this element and ng-class
+            // would drop classes it doesn't own on re-evaluation.
+            element[0].classList.toggle('sc-hidden', !!st.hidden && !st.editing);
             scope.$applyAsync(function () {
               var s = st.hold || st.toggle || st.preview || 0;
               scope.glanceSide = (s === 1) ? 'left' : (s === -1) ? 'right' : (s === 2) ? 'back' : 'none';
+              scope.panelHidden = !!st.hidden;
+              scope.panelKeyLabel = st.panelKey ? String(st.panelKey).toUpperCase() : 'the unbound hide key';
             });
           }
         });
@@ -744,10 +784,10 @@ angular.module('beamng.apps')
           if (cfg && typeof cfg === 'object') {
             scope.$evalAsync(function () {
               // Copy EVERY setting straight in, so a new property added to the Lua
-              // defaults flows through with no UI-side list to keep in sync (the old
-              // hasOwnProperty guard silently dropped any key cfg didn't already have --
-              // that's why new sliders went blank after a reload). Skip only the meta
-              // fields, which are applied to their own scope vars just below.
+              // defaults flows through with no UI-side list to keep in sync. A
+              // hasOwnProperty guard here would silently drop keys scope.cfg doesn't
+              // already have, blanking new sliders. Skip only the meta fields, which
+              // are applied to their own scope vars just below.
               var SC_META = { preset: 1, modified: 1, modEnabled: 1, mirrorSeat: 1, notaryEnabled: 1, version: 1, vibeStopScale: 1 };
               for (var k in cfg) {
                 if (!SC_META[k]) { scope.cfg[k] = cfg[k]; }
@@ -777,6 +817,8 @@ angular.module('beamng.apps')
 
       // Reset: discard this preset's unsaved tweaks (no confirm, by design)
       scope.resetChanges = function () {
+        if (!scope.modified) { return; }
+        scope.openDD = null;
         bngApi.engineLua("steerCam and steerCam.resetOverrides() or nil", function () {
           scope.$evalAsync(function () { load(); });
         });
@@ -784,6 +826,7 @@ angular.module('beamng.apps')
 
       // Save changes to the current preset (shipped/protected ones included) -- confirm, then bake in
       scope.saveChanges = function () {
+        if (!scope.canSaveChanges()) { return; }
         scope.openDD = null;
         var name = scope.preset;
         scope.modal = { text: 'Save changes to the preset "' + name + '"?', yes: 'Save', action: function () {
