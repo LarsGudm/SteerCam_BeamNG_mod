@@ -1,0 +1,97 @@
+===========================================================================
+ SteerCam — HOW TO SHIP
+===========================================================================
+
+---------------------------------------------------------------------------
+ THE ONE RULE
+---------------------------------------------------------------------------
+Zip the CONTENTS of steercam_larsgudm\ so lua, ui and settings sit at the
+ZIP ROOT. Everything inside that folder ships. Everything outside it does
+not. There is no file-picking beyond that.
+
+  CORRECT                       WRONG (one folder too deep - game finds nothing)
+  steercam_larsgudm.zip         steercam_larsgudm.zip
+  |- lua\...                    |- steercam_larsgudm\
+  |- ui\...                          |- lua\...
+  |- settings\...
+
+NOT in the zip (they live at repo root, outside the mod folder):
+  DEV_GUIDE.txt, SHIPPING.txt, LICENSE, README.md, assets\, node_modules\
+
+Do NOT create a mod_info\ folder. The repository site adds it on upload.
+
+
+---------------------------------------------------------------------------
+ 1. BUMP THE VERSION — TWO PLACES, THEY MUST MATCH
+---------------------------------------------------------------------------
+  [ ] steercam_larsgudm\lua\ge\extensions\core\cameraModes\steercam.lua
+          steerCam.version = "1.2"
+  [ ] steercam_larsgudm\ui\modules\apps\SteerCam\app.json
+          "version": "1.2",
+
+Everything else follows from steercam.lua: the Settings overlay, and the
+stamp on any preset the mod writes. Nothing else is hardcoded.
+
+app.json is the exception because the game parses that manifest itself,
+before any mod Lua runs, so it cannot read steerCam.version. If the two
+drift, the console logs a yellow warning naming both numbers on load.
+
+
+---------------------------------------------------------------------------
+ 2. PACK
+---------------------------------------------------------------------------
+PowerShell:
+
+  Compress-Archive -Path "C:\Mods\BeamNG\SteerCam_BeamNG_mod\steercam_larsgudm\*" -DestinationPath "C:\Mods\BeamNG\steercam_larsgudm.zip" -Force
+
+The trailing \* is the whole trick - it packs the contents, not the folder.
+
+Two things that WILL bite:
+  - The zip must be named steercam_larsgudm.zip, matching the previous
+    upload. A different name makes the site show a red "filename has
+    changed" banner; the fix is deleting the pending update and re-posting.
+  - NEVER create the zip inside steercam_larsgudm\. The next pack would
+    nest the old zip inside the new one. Always pack to C:\Mods\BeamNG\.
+
+
+---------------------------------------------------------------------------
+ 3. VERIFY BEFORE UPLOADING
+---------------------------------------------------------------------------
+Open the zip. It should hold exactly these 9 files, with lua/ui/settings
+at the root:
+
+  lua\ge\extensions\core\cameraModes\steercam.lua
+  lua\ge\extensions\core\input\actions\steercam.json
+  lua\vehicle\extensions\auto\steerCamFeed.lua
+  settings\inputmaps\keyboard_steercam.json
+  settings\steercam\presets\default.json
+  settings\steercam\presets\devs-preset.json
+  ui\modules\apps\SteerCam\app.js
+  ui\modules\apps\SteerCam\app.json
+  ui\modules\apps\SteerCam\app.png
+
+Raw upload is ~60 KB. The size the site displays afterwards is larger
+because it includes the mod_info and preview images it adds itself.
+
+Stronger check: drop the zip into the mods\ folder of a machine that does
+NOT have the dev junction and confirm it loads. That catches the
+"zipped one folder too deep" mistake before users do.
+
+
+---------------------------------------------------------------------------
+ 4. UPLOAD
+---------------------------------------------------------------------------
+  1) Mod page on the BeamNG repository site, logged in.
+  2) Manage / Post update.
+  3) Upload the zip, add a changelog line, set the version to match step 1.
+
+A DELETED update still reserves its version string. If you delete and
+re-post, the re-upload needs a different label (e.g. "1.2a") - that is a
+site label only, the internal version stays 1.2.
+
+Post-upload states, all automatic:
+  State        moderated -> visible   (human approval)
+  Repackaging  queued -> ok           (site adds mod_info)
+  CDN State    pending -> ok          (pushed to download servers)
+
+===========================================================================
