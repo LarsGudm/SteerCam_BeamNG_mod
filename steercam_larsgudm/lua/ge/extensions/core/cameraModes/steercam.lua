@@ -1,9 +1,9 @@
 -- SteerCam :: driver camera with ETS2-style "steer camera turn"
 -- ----------------------------------------------------------------------------
--- File: lua/ge/extensions/core/cameraModes/driversteer.lua
+-- File: lua/ge/extensions/core/cameraModes/steercam.lua
 --
 -- A selectable driver camera that turns the view toward where the wheels are
--- pointed. Enable in Options -> Camera -> Switching order (tick "Driversteer"),
+-- pointed. Enable in Options -> Camera -> Switching order (tick "Steercam"),
 -- press C. Adjust from the "SteerCam Settings" UI app.
 --
 -- Profiles:
@@ -20,7 +20,7 @@ if not steerCam then
   -- writes both take it from here. app.json is the one exception -- the game parses that
   -- manifest itself, before any mod Lua runs, so it can't read this. Bump BOTH on release;
   -- the check below catches a half-bump instead of letting it ship silently.
-  steerCam.version = "1.2"
+  steerCam.version = "1.4"
   do
     local app = jsonReadFile and jsonReadFile("/ui/modules/apps/SteerCam/app.json")
     local av = app and app.version
@@ -55,7 +55,7 @@ if not steerCam then
   -- load, the base sanitizePreset fills missing keys from, and the seed for the
   -- Custom profile. The shipped default.json mirrors this for the dropdown entry.
   steerCam.defaults = {
-    camEnable = true, camFwd = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0, nearClip = 0.05,
+    camEnable = true, camFwd = 0.0, camSide = 0.0, camUp = 0.0, camYaw = 0.0, camPitch = 0.0, camFov = 65.0, stableHorizon = 0.0, nearClip = 0.05,
     steerEnable = true, angle = 18.0, reach = 100.0, stiffness = 15.0,
     reverseSteer = false, reverseAngle = 9.0, reverseTime = 500.0, speedFade = false, fadeSpeed = 30.0, fadeFloor = 0.0,
     glanceEnable = true, glanceLeft = 115.0, glanceRight = 115.0, glanceBack = 0.0, glanceTime = 120.0,
@@ -74,6 +74,7 @@ if not steerCam then
   -- Shared by sanitizePreset (file loads) and steerCam.set (Custom edits).
   local ranges = {
     camFwd = {-0.5, 0.5},
+    camSide = {-0.5, 0.5},
     camUp = {-0.5, 0.5},
     camYaw = {-45, 45},
     camPitch = {-45, 45},
@@ -708,7 +709,73 @@ if not steerCam then
   end
 end
 
-local makeStockDriver = require('core/cameraModes/driver')
+-- BeamNG 0.40 moved the stock driver camera implementation to occupant.lua.
+-- Keep the legacy module on older game versions.
+local usesOccupantCamera = FS and FS.fileExists
+    and FS:fileExists('/lua/ge/extensions/core/cameraModes/occupant.lua')
+local stockCameraMode = usesOccupantCamera and 'core/cameraModes/occupant' or 'core/cameraModes/driver'
+local makeStockDriver = require(stockCameraMode)
+
+-- A custom mode named "steercam" has no matching per-seat JBeam camera data.
+-- On 0.40+, borrow the native driver occupant's config/ref nodes so the occupant
+-- constructor starts at the same seat camera as the stock mode.
+local function syncOccupantCamera(self, veh)
+  local manager = extensions and extensions.core_vehicle_manager
+  if not usesOccupantCamera or not veh or not manager or type(manager.getVehicleData) ~= 'function' then return end
+  local vid = veh:getID()
+  if vid == nil then return end
+  if self._steerCamConfigVehicle == vid then return end
+  local vehicleData = manager.getVehicleData(vid)
+  local vmvd = vehicleData and vehicleData.vdata
+  if not vmvd then return end
+
+  local driverNode, isRHD
+  if core_camera and core_camera.getDriverData then
+    driverNode, isRHD = core_camera.getDriverData(veh)
+  end
+  local occupantConfigs = vmvd.cameraData and vmvd.cameraData.occupant
+  local driverConfig
+  if type(occupantConfigs) == 'table' then
+    for _, config in pairs(occupantConfigs) do
+      if type(config) == 'table' and driverNode ~= nil and config.camNodeID == driverNode then
+        driverConfig = config
+        break
+      end
+    end
+    if not driverConfig then
+      local seatName = isRHD and 'FR' or 'FL'
+      for _, config in pairs(occupantConfigs) do
+        if type(config) == 'table' and config.name == seatName then
+          driverConfig = config
+          break
+        end
+      end
+    end
+  end
+
+  local refNodes
+  if driverConfig then
+    tableMergeRecursive(self, driverConfig)
+    local cameraName = 'occupant.' .. tostring(driverConfig.name)
+    refNodes = vmvd.cameraRefNodes and vmvd.cameraRefNodes[cameraName]
+  elseif driverNode ~= nil and self.camNodeID == nil then
+    -- Legacy vehicles may not define occupant slots; use their stock driver node.
+    self.camNodeID = driverNode
+    refNodes = vmvd.cameraRefNodes and
+        (vmvd.cameraRefNodes['onboard.driver'] or vmvd.cameraRefNodes.driver)
+  end
+
+  if (driverConfig or driverNode ~= nil) and self.onVehicleCameraConfigChanged then
+    self:onVehicleCameraConfigChanged()
+  end
+  if not refNodes then
+    refNodes = vmvd.refNodes and vmvd.refNodes[0]
+  end
+  if refNodes and self.setRefNodes then
+    self:setRefNodes(refNodes.ref, refNodes.left, refNodes.back)
+  end
+  self._steerCamConfigVehicle = vid
+end
 
 local qtmp = quat()
 local gFwd, gUp, gRight = vec3(), vec3(), vec3()  -- scratch for the glance lean
@@ -848,6 +915,7 @@ return function(...)
 
   local stockUpdate = o.update
   o.update = function(self, data)
+    syncOccupantCamera(self, data.veh)
     stockUpdate(self, data)        -- stock fills data.res.pos / rot / fov
     steerCam._frame = (steerCam._frame or 0) + 1   -- heartbeat: UI greys out when this stalls (not in the SteerCam view)
 
@@ -919,12 +987,15 @@ return function(...)
       -- closer stops nearby geometry (e.g. the roof at high FOV) poking through. Too
       -- low costs depth precision (distant z-fighting), hence the modest floor.
       if c.nearClip and data.res.nearClip ~= nil then data.res.nearClip = c.nearClip end
-      if (c.camFwd ~= 0 or c.camUp ~= 0) and data.veh ~= nil then
+      if (c.camFwd ~= 0 or c.camSide ~= 0 or c.camUp ~= 0) and data.veh ~= nil then
         gFwd:set(data.veh:getDirectionVector())     -- car forward (world)
         gUp:set(data.veh:getDirectionVectorUp())    -- car up (world)
+        gRight:setCross(gFwd, gUp); gRight:normalize()
         gFwd:setScaled(c.camFwd or 0)
+        gRight:setScaled(c.camSide or 0)
         gUp:setScaled(c.camUp or 0)
         data.res.pos:setAdd(gFwd)
+        data.res.pos:setAdd(gRight)
         data.res.pos:setAdd(gUp)
       end
       -- Orientation rebuild: re-aim (pan/tilt) AND set the roll/up. This runs

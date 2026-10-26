@@ -1,7 +1,7 @@
 {
   "name": "Steer Cam Settings",
   "author": "LarsGudm",
-  "version": "1.2",
+  "version": "1.4",
   "description": "A comprehensive and fully customizable driver camera mod.",
   "directive": "steerCam",
   "domElement": "<steer-cam></steer-cam>",

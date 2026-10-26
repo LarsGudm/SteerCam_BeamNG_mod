@@ -275,6 +275,9 @@ angular.module('beamng.apps')
           '<div class="sc-row"><span>Forward Offset<span class="sc-tipsrc" ng-if="tips.camFwd">{{tips.camFwd}}</span><span class="sc-info" ng-if="tips.camFwd">&#9432;</span></span>',
             '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camFwd" ng-change="set(\'camFwd\', cfg.camFwd)" ng-disabled="locked">',
             '<b>{{cfg.camFwd}}m</b></div>',
+          '<div class="sc-row"><span>Lateral Offset<span class="sc-tipsrc" ng-if="tips.camSide">{{tips.camSide}}</span><span class="sc-info" ng-if="tips.camSide">&#9432;</span></span>',
+            '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camSide" ng-change="set(\'camSide\', cfg.camSide)" ng-disabled="locked">',
+            '<b>{{cfg.camSide}}m</b></div>',
           '<div class="sc-row"><span>Vertical Offset<span class="sc-tipsrc" ng-if="tips.camUp">{{tips.camUp}}</span><span class="sc-info" ng-if="tips.camUp">&#9432;</span></span>',
             '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camUp" ng-change="set(\'camUp\', cfg.camUp)" ng-disabled="locked">',
             '<b>{{cfg.camUp}}m</b></div>',
@@ -515,6 +518,7 @@ angular.module('beamng.apps')
         speed: 'Optional immersive effects: FOV vertigo, corner head-roll, and vertical head inertia. Off by default.',
         twirl: 'Double click header to collapse/expand all',
         camFwd: '',
+        camSide: 'Positive moves right; negative moves left, relative to the vehicle.',
         camUp: '',
         camYaw: '',
         camPitch: '',
@@ -681,7 +685,7 @@ angular.module('beamng.apps')
         });
       };
       scope.cfg = {
-        camEnable: true, camFwd: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0, nearClip: 0.05,
+        camEnable: true, camFwd: 0, camSide: 0, camUp: 0, camYaw: 0, camPitch: 0, camFov: 65, stableHorizon: 0, nearClip: 0.05,
         steerEnable: true,
         angle: 18, reach: 100, stiffness: 15, reverseSteer: false, reverseAngle: 9, reverseTime: 500, speedFade: false, fadeSpeed: 30, fadeFloor: 0,
         glanceEnable: true,

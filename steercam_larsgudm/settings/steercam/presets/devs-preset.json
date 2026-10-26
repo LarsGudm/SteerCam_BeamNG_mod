@@ -4,6 +4,7 @@
   "protected": true,
   "camEnable": true,
   "camFwd": 0.27,
+  "camSide": 0,
   "camUp": 0.01,
   "camYaw": 3,
   "camPitch": -1,
