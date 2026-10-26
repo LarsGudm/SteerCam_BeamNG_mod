@@ -717,8 +717,8 @@ local stockCameraMode = usesOccupantCamera and 'core/cameraModes/occupant' or 'c
 local makeStockDriver = require(stockCameraMode)
 
 -- A custom mode named "steercam" has no matching per-seat JBeam camera data.
--- On 0.40+, borrow the native driver occupant's config/ref nodes so the occupant
--- constructor starts at the same seat camera as the stock mode.
+-- On 0.40+, borrow the native driver occupant's config/ref nodes so the camera uses the
+-- same seat as the stock mode. This runs on the first update and on each vehicle change, not in the constructor.
 local function syncOccupantCamera(self, veh)
   local manager = extensions and extensions.core_vehicle_manager
   if not usesOccupantCamera or not veh or not manager or type(manager.getVehicleData) ~= 'function' then return end
