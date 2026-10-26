@@ -35,7 +35,7 @@ based on steer input, but the project has grown a lot in scope since that initia
 5. Add the **Steer Cam Settings** app from Esc → UI Apps → Add App to tune it.
 
 ## Compatibility
-- BeamNG.drive 0.38+.
+- BeamNG.drive 0.38+ (including 0.40).
 - Adds a new camera type rather than overwriting one, so should work with other camera mods!
 
 ## Credits
