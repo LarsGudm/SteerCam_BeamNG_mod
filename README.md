@@ -41,4 +41,4 @@ based on steer input, but the project has grown a lot in scope since that initia
 ## Credits
 Vibe coded by: **LarsGudm**, with Claude Opus and Fable.
 
-Thanks to **@ChaDonSom** (on github) for adding 0.40 support!
+Thanks to **@ChaDonSom** (github) for helping out with 0.40 support!

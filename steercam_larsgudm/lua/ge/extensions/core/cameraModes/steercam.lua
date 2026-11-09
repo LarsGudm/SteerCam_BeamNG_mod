@@ -1,10 +1,11 @@
--- SteerCam :: driver camera with ETS2-style "steer camera turn"
+-- SteerCam :: interior camera with ETS2-style "steer camera turn"
 -- ----------------------------------------------------------------------------
 -- File: lua/ge/extensions/core/cameraModes/steercam.lua
 --
--- A selectable driver camera that turns the view toward where the wheels are
--- pointed. Enable in Options -> Camera -> Switching order (tick "Steercam"),
--- press C. Adjust from the "SteerCam Settings" UI app.
+-- Turns the interior (seat) view toward where the wheels are pointed. Runs as a
+-- filter on the game's own interior cameras (BeamNG 0.40+), so there is nothing
+-- to select: it is active in every interior view while the mod is enabled.
+-- Adjust from the "SteerCam Settings" UI app.
 --
 -- Profiles:
 --   File presets : every *.json in /settings/steercam/presets/ becomes a
@@ -708,80 +709,14 @@ if not steerCam then
   end
 end
 
--- BeamNG 0.40 moved the stock driver camera implementation to occupant.lua.
--- Keep the legacy module on older game versions.
-local usesOccupantCamera = FS and FS.fileExists
-    and FS:fileExists('/lua/ge/extensions/core/cameraModes/occupant.lua')
-local stockCameraMode = usesOccupantCamera and 'core/cameraModes/occupant' or 'core/cameraModes/driver'
-local makeStockDriver = require(stockCameraMode)
-
--- A custom mode named "steercam" has no matching per-seat JBeam camera data.
--- On 0.40+, borrow the occupant config/ref nodes of the seat the player sits in (the
--- driver seat when unseated or on cars without the seat system). Runs from update(),
--- not the constructor, and re-syncs on each vehicle or seat change.
--- Sets self._seatSide ("left"/"right"/"center", nil = legacy rhd path) and
--- self._seatDrives (false = passenger: steer-follow is off).
-local function syncOccupantCamera(self, veh, player)
-  local manager = extensions and extensions.core_vehicle_manager
-  if not usesOccupantCamera or not veh or not manager or type(manager.getVehicleData) ~= 'function' then return end
-  local vid = veh:getID()
-  if vid == nil then return end
-
-  local seats = gameplay_seatOccupants
-  local presence = seats and seats.getPlayerPresence and seats.getPlayerPresence(player or 0)
-  if presence and presence.vehicleId ~= vid then presence = nil end
-  local pm = presence and presence.permissionMode
-  self._seatDrives = pm == nil or pm == 'driver' or pm == 'unrestricted'
-  local seatId = presence and presence.seatId
-
-  local key = vid .. ':' .. tostring(seatId)
-  if self._steerCamConfigKey == key then return end
-  local vehicleData = manager.getVehicleData(vid)
-  local vmvd = vehicleData and vehicleData.vdata
-  if not vmvd then return end
-
-  local driverNode
-  if core_camera and core_camera.getDriverData then
-    driverNode = core_camera.getDriverData(veh)
-  end
-  local occupantConfigs = vmvd.cameraData and vmvd.cameraData.occupant
-  local seatConfig
-  if type(occupantConfigs) == 'table' then
-    for _, config in pairs(occupantConfigs) do
-      if type(config) == 'table' then
-        if seatId ~= nil then
-          if config.name == seatId then seatConfig = config break end
-        elseif driverNode ~= nil and config.camNodeID == driverNode then
-          seatConfig = config break
-        end
-      end
-    end
-  end
-  self._seatSide = seatConfig and (seatConfig.seatSide or 'center') or nil
-
-  local refNodes
-  if seatConfig then
-    tableMergeRecursive(self, seatConfig)
-    self.hidden = false   -- seat configs ship hidden=true; the game un-hides only occupant.* cams
-    local cameraName = 'occupant.' .. tostring(seatConfig.name)
-    refNodes = vmvd.cameraRefNodes and vmvd.cameraRefNodes[cameraName]
-  elseif driverNode ~= nil and self.camNodeID == nil then
-    -- Legacy vehicles may not define occupant slots; use their stock driver node.
-    self.camNodeID = driverNode
-    refNodes = vmvd.cameraRefNodes and
-        (vmvd.cameraRefNodes['onboard.driver'] or vmvd.cameraRefNodes.driver)
-  end
-
-  if (seatConfig or driverNode ~= nil) and self.onVehicleCameraConfigChanged then
-    self:onVehicleCameraConfigChanged()
-  end
-  if not refNodes then
-    refNodes = vmvd.refNodes and vmvd.refNodes[0]
-  end
-  if refNodes and self.setRefNodes then
-    self:setRefNodes(refNodes.ref, refNodes.left, refNodes.back)
-  end
-  self._steerCamConfigKey = key
+-- The stock interior camera this view is showing right now: a seat's occupant.* cam, or
+-- the legacy "driver" cam on cars without the seat system. nil in any other view.
+local function activeInteriorCam(data)
+  if data.veh == nil or not core_camera then return end
+  local cams = core_camera.getCameraDataById(data.vid, core_camera.getContextIdForPlayer(data.player))
+  if not cams then return end
+  local name = core_camera.getActiveCamName(data.player)
+  if name == 'driver' or (name and name:find('^occupant%.')) then return cams[name], name end
 end
 
 local qtmp = quat()
@@ -846,50 +781,13 @@ local easeCurves = {
   Jump        = makeBezier(0.160, 0.080, 0.000, 1.020),   -- overshoots past the target, then settles
 }
 
--- Make SteerCam look like the stock "driver" camera to the UI, so per-app
--- "Hide in cockpit view" works while SteerCam is active. BeamNG only hides
--- cockpit apps when the active camera name is exactly "driver" (see the UI's
--- app-service handleCameraChange). We remap our name on EVERY notification so a
--- later engine re-broadcast of "steercam" can't undo it (a one-shot is not
--- enough). Approach mirrors the Enhanced Interior Camera mod. Installed once.
-do
-  local gh = rawget(_G, 'guihooks')
-  if type(gh) == 'table' and type(gh.trigger) == 'function' and not gh._steerCamWrapped then
-    local orig = gh.trigger
-    gh.trigger = function(evt, payload, ...)
-      if evt == 'onCameraNameChanged' then          -- drives cockpit app hide/show
-        if type(payload) ~= 'table' then payload = { name = payload } end
-        if payload.name == 'steercam' then payload.name = 'driver' end
-      elseif evt == 'CameraConfigChanged' and type(payload) == 'table' then
-        if payload.focusedCamName == 'steercam' then payload.focusedCamName = 'driver' end
-      end
-      return orig(evt, payload, ...)
-    end
-    gh._steerCamWrapped = true
-  end
-end
-
-do
-  local ex = rawget(_G, 'extensions')
-  -- Guard with a stored function ref in _G, NOT a key on the `extensions` table:
-  -- the extension loader treated that key as a module name and logged "extension
-  -- unavailable: _steerCamCamWrap". Comparing the live hook against our stored
-  -- wrapper also re-wraps correctly if `extensions` ever reloads.
-  if type(ex) == 'table' and type(ex.hook) == 'function' and ex.hook ~= rawget(_G, '_steerCamExHook') then
-    local origHook = ex.hook
-    local wrapped = function(evt, ...)
-      if evt == 'onCameraModeChanged' and select(1, ...) == 'steercam' then
-        return origHook(evt, 'driver', select(2, ...))   -- forward remaining args intact
-      end
-      return origHook(evt, ...)
-    end
-    ex.hook = wrapped
-    rawset(_G, '_steerCamExHook', wrapped)
-  end
-end
-
-return function(...)
-  local o = makeStockDriver(...)   -- a real stock driver-camera instance
+-- A filter camera, like the stock trackir/transition ones: the game runs update() every
+-- frame after the active camera, on that camera's result. It only acts on the interior
+-- cameras (activeInteriorCam), so there is no "steercam" entry in the camera list.
+return function()
+  local o = {}
+  o.isGlobal = true; o.isFilter = true; o.hidden = true
+  o.runningOrder = 0.1   -- before the stock transition filter (0.2), so camera-switch blends include SteerCam
   o.steerYaw  = 0
   o.reverseBlend = 0   -- 0 = forward turn, 1 = mirrored (reverse) turn
   o.reverseFrom = 0; o.reverseProg = 1; o.reverseTargetVal = 0   -- reverse tween state
@@ -912,31 +810,17 @@ return function(...)
   o.vertOff = 0                           -- current head-lift offset (m, + = up off seat)
   o.vibePhase = 0; o.vibeEnv = 0          -- engine-vibration time accumulator + envelope
   o.spdVibePhase = 0                      -- speed-vibration time accumulator
-  o._uiKeepAlive = 0   -- timer to reassert the cockpit-hide while active
   o._rhd = nil   -- last-logged right-hand-drive flag (debug log throttle only)
+  o._camKey = nil   -- interior cam + vehicle handled last frame (nil = was not active)
+  o._seatDrives = true; o._seatT = 0   -- does this seat control the car (false = passenger) + its re-check timer
 
-  -- reset the reassert timer on any camera change so it fires again next frame
-  o.onCameraChanged = function(self, focused)
-    self._uiKeepAlive = 0
-  end
-
-  local stockUpdate = o.update
   o.update = function(self, data)
-    syncOccupantCamera(self, data.veh, data.player)
-    stockUpdate(self, data)        -- stock fills data.res.pos / rot / fov
-    steerCam._frame = (steerCam._frame or 0) + 1   -- heartbeat: UI greys out when this stalls (not in the SteerCam view)
+    local cam, camName = activeInteriorCam(data)
+    if not cam then self._camKey = nil return end
+    steerCam._frame = (steerCam._frame or 0) + 1   -- heartbeat: UI greys out when this stalls (not in an interior view)
 
-    -- Reassert "driver" to the UI every 0.5s while active. The guihooks wrapper
-    -- (above) already remaps the engine's own notifications, but external toggles
-    -- (UI close, multiplayer, etc.) can reset the cockpit state without one.
-    self._uiKeepAlive = (self._uiKeepAlive or 0) - data.dt
-    if self._uiKeepAlive <= 0 then
-      self._uiKeepAlive = 0.5
-      if guihooks then guihooks.trigger('onCameraNameChanged', { name = 'driver' }) end
-    end
-
-    -- Mod globally disabled -> leave the stock driver result untouched.
-    if not steerCam.enabled then return end
+    -- Mod globally disabled -> leave the stock interior result untouched.
+    if not steerCam.enabled then self._camKey = nil return end
 
     -- Car notary: swap to this vehicle's config if it changed (no-op when off / unchanged).
     -- Done before reading cfg so this frame uses it. (Saves are driven by the UI, not here.)
@@ -945,6 +829,27 @@ return function(...)
     local c = steerCam.cfg
     local dt = data.dt
     if dt < 1e-4 then dt = 1e-4 end
+
+    -- One instance serves every car and seat of this view, so on entering an interior
+    -- view (or changing seat/vehicle) the smoothing state is stale: start clean.
+    local key = camName .. data.vid
+    local fresh = key ~= self._camKey
+    self._camKey = key
+    if fresh then
+      steerCam._snapNext = { all = true }; steerCam._snapSteer = true
+      self.velInit = false
+    end
+
+    -- Steer-follow is for a seat that controls the car. getPlayerPresence deep-copies,
+    -- so poll it instead of calling it every frame.
+    self._seatT = self._seatT - dt
+    if fresh or self._seatT <= 0 then
+      self._seatT = 0.5
+      local seats = gameplay_seatOccupants
+      local p = seats and seats.getPlayerPresence and seats.getPlayerPresence(data.player)
+      local pm = p and p.vehicleId == data.vid and p.permissionMode or nil
+      self._seatDrives = pm == nil or pm == 'driver' or pm == 'unrestricted'
+    end
 
     -- A setting just changed (UI toggle, preset switch, mod re-enable): consume the snap
     -- flags so the affected smoothers jump STRAIGHT to their current target this frame
@@ -968,16 +873,9 @@ return function(...)
     -- seat we flip the side-specific ones (camera pan, lateral offset, glance L/R)
     -- so the feel is symmetric about the occupant. Center seats are not mirrored.
     -- Input direction is never flipped (the right glance still looks right).
-    -- Side comes from the occupied seat's seatSide (0.40+); cars without seat data
-    -- fall back to the driver cam's RHD flag (core_camera.getDriverData) -- NOT
+    -- Side comes from the active seat camera's seatSide, else its RHD flag -- NOT
     -- seat-node geometry, which is unreliable because some cars centre the cam node.
-    local rhd = false
-    if self._seatSide ~= nil then
-      rhd = self._seatSide == 'right'
-    elseif data.veh ~= nil and core_camera and core_camera.getDriverData then
-      local _, isRHD = core_camera.getDriverData(data.veh)
-      rhd = (isRHD == true)
-    end
+    local rhd = cam.seatSide == 'right' or (cam.seatSide == nil and cam.rightHandCamera == true)
     if rhd ~= self._rhd then        -- (debug) log only when it changes
       self._rhd = rhd
       log('I', 'steercam', 'rhd=' .. tostring(rhd)
@@ -1047,7 +945,7 @@ return function(...)
 
     -- Steer-follow only for a seat that controls the car; passengers ease back to center.
     local steer = 0
-    if c.steerEnable and self._seatDrives ~= false and steerCamFeed ~= nil and data.veh ~= nil then
+    if c.steerEnable and self._seatDrives and steerCamFeed ~= nil and data.veh ~= nil then
       local vid = data.veh.getID and data.veh:getID() or nil
       if vid ~= nil then steer = steerCamFeed[vid] or 0 end
     end

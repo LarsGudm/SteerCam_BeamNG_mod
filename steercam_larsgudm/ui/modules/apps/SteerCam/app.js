@@ -14,14 +14,14 @@ angular.module('beamng.apps')
           // otherwise eats the gap between the value text and the panel edge).
           '.steerCamApp .sc-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:8px}',
           '.steerCamApp .sc-title{font-weight:700;font-size:14px;letter-spacing:.5px;color:#ff7a18}',
-          // when the SteerCam view is NOT active, tweaks are not visible -> grey the title +
+          // when an interior view is NOT active, tweaks are not visible -> grey the title +
           // a grey ring inside the panel edge as a heads-up (.sc-inactive set by the poll).
           '.steerCamApp.sc-inactive .sc-title{color:#9a9aa0}',
           '.steerCamApp.sc-inactive{box-shadow:inset 0 0 0 2px #8a8a90}',
           // ...and EVERYTHING oranges-out to grey while the view is inactive: sliders + their
           // thumbs (accent-color), every accent (headers, glyphs, twirl, info, gear, presets
           // label) and the param names. Orange = a live/active change; grey = you are changing
-          // it but not seeing it (not in the SteerCam view). !important: the per-input orange
+          // it but not seeing it (not in an interior view). !important: the per-input orange
           // rules below (.sc-row input[type=range] etc.) are more specific and would win,
           // leaving the sliders orange while inactive.
           '.steerCamApp.sc-inactive input{accent-color:#8a8a90 !important}',
@@ -691,7 +691,7 @@ angular.module('beamng.apps')
       // reflect the LIVE glance (hold keybind > toggle keybind > UI preview) so the
       // Preview buttons highlight whenever a glance is active -- from ANY source --
       // and clear the instant it ends. Polled, so keybind glances update the UI too.
-      // grey-out heartbeat: steerCam._frame bumps every frame the SteerCam view is active.
+      // grey-out heartbeat: steerCam._frame bumps every frame an interior view is active.
       // If it hasn't advanced since the last poll we're NOT in that view (tweaks invisible),
       // so add .sc-inactive to the root -> grey title + grey panel ring.
       var lastActiveFrame = -1;
