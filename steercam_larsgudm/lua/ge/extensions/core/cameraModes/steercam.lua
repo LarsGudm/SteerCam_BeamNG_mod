@@ -762,6 +762,7 @@ local function syncOccupantCamera(self, veh, player)
   local refNodes
   if seatConfig then
     tableMergeRecursive(self, seatConfig)
+    self.hidden = false   -- seat configs ship hidden=true; the game un-hides only occupant.* cams
     local cameraName = 'occupant.' .. tostring(seatConfig.name)
     refNodes = vmvd.cameraRefNodes and vmvd.cameraRefNodes[cameraName]
   elseif driverNode ~= nil and self.camNodeID == nil then

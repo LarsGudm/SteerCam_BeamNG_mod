@@ -35,11 +35,10 @@ based on steer input, but the project has grown a lot in scope since that initia
 5. Add the **Steer Cam Settings** app from Esc → UI Apps → Add App to tune it.
 
 ## Compatibility
-- BeamNG.drive 0.38+ (including 0.40).
+- BeamNG.drive 0.40+
 - Adds a new camera type rather than overwriting one, so should work with other camera mods!
 
 ## Credits
-Vibe coded by: **LarsGudm**, using Claude Opus 4.8.
+Vibe coded by: **LarsGudm**, with Claude Opus and Fable.
 
-Being that this project is written with AI, it has alot of detailed commentary throughout the code. Have a read through
-if you want to learn how anything works! 
+Thanks to **@ChaDonSom** (on github) for adding 0.40 support!
