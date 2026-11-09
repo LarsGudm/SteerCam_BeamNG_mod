@@ -42,8 +42,6 @@
   "vertigoThreshold": 160,
   "speedRoll": false,
   "rollAngle": 5,
-  "rollSource": "Steering",
-  "rollThreshold": 160,
   "speedPan": false,
   "speedPanInfluence": 40,
   "speedPanAnticipate": 200,

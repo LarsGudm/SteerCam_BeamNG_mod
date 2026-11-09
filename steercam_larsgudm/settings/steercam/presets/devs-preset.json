@@ -41,8 +41,6 @@
   "vertigoDolly": 0.22,
   "speedRoll": true,
   "rollAngle": 3,
-  "rollSource": "Inertia",
-  "rollThreshold": 160,
   "vertigoThreshold": 160,
   "vertInertia": true,
   "vertInertiaMax": 4,

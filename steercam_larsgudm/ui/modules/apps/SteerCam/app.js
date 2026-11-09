@@ -408,18 +408,6 @@ angular.module('beamng.apps')
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll change<span class="sc-tipsrc" ng-if="tips.rollAngle">{{tips.rollAngle}}</span><span class="sc-info" ng-if="tips.rollAngle">&#9432;</span></span>',
             '<input type="range" min="0" max="20" step="0.5" ng-model="cfg.rollAngle" ng-change="set(\'rollAngle\', cfg.rollAngle)" ng-disabled="locked || !cfg.speedRoll">',
             '<b>{{cfg.rollAngle}}°</b></div>',
-          '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedRoll}"><span>Roll source<span class="sc-tipsrc" ng-if="tips.rollSource">{{tips.rollSource}}</span><span class="sc-info" ng-if="tips.rollSource">&#9432;</span></span>',
-            '<div class="sc-dd" ng-mouseleave="openDD=null">',
-              '<button class="sc-dd-head" ng-click="toggleDD(\'rollSource\')" ng-disabled="locked || !cfg.speedRoll">{{rollSourceLabel(cfg.rollSource)}}<span class="sc-dd-arr">▾</span></button>',
-              '<div class="sc-dd-list" ng-show="openDD===\'rollSource\'">',
-                '<div class="sc-dd-opt" ng-repeat="o in rollSourceOptions" ng-class="{active: cfg.rollSource===o.k}" ng-click="setRollSource(o.k); openDD=null">{{o.l}}</div>',
-              '</div>',
-            '</div></div>',
-          // dead under Inertia: that source reads lateral g, which already scales with
-          // speed, so there is no ramp to set. Dim + disable so it doesn't look live.
-          '<div class="sc-row" ng-class="{\'sc-dim\': !cfg.speedRoll || cfg.rollSource === \'Inertia\'}"><span>Speed threshold<span class="sc-tipsrc" ng-if="tips.rollThreshold">{{tips.rollThreshold}}</span><span class="sc-info" ng-if="tips.rollThreshold">&#9432;</span></span>',
-            '<input type="range" min="20" max="400" step="5" ng-model="cfg.rollThreshold" ng-change="set(\'rollThreshold\', cfg.rollThreshold)" ng-disabled="locked || !cfg.speedRoll || cfg.rollSource === \'Inertia\'">',
-            '<b style="flex:0 0 64px">{{cfg.rollThreshold}} km/h</b></div>',
           '<div class="sc-row sc-chk"><label><input type="checkbox" ng-model="cfg.speedPan" ng-change="set(\'speedPan\', cfg.speedPan)" ng-disabled="locked"> Speed pan + tilt<span class="sc-tipsrc" ng-if="tips.speedPan">{{tips.speedPan}}</span><span class="sc-info" ng-if="tips.speedPan">&#9432;</span></label></div>',
           '<div class="sc-row" ng-class="{\'sc-dim\':!cfg.speedPan}"><span>Influence<span class="sc-tipsrc" ng-if="tips.speedPanInfluence">{{tips.speedPanInfluence}}</span><span class="sc-info" ng-if="tips.speedPanInfluence">&#9432;</span></span>',
             '<input type="range" min="0" max="100" step="5" ng-model="cfg.speedPanInfluence" ng-change="set(\'speedPanInfluence\', cfg.speedPanInfluence)" ng-disabled="locked || !cfg.speedPan">',
@@ -547,10 +535,8 @@ angular.module('beamng.apps')
         vertigo: 'Widen the FOV as you speed up, with a matching forward dolly (the vertigo warp).',
         vertigoFov: 'Max extra FOV added by the time you reach the speed range.',
         vertigoDolly: 'Distance kept "pinned" by the counter-dolly. 0 = FOV only, no camera move.',
-        speedRoll: 'Simulate leaning your head into corners at speed via camera roll.',
-        rollSource: 'Steering = steering input | Inertia = from real lateral g-force (full effect at ~1g)',
+        speedRoll: 'Simulates head lean (perspective change) with sideways g-force (full lean at ~1 g).',
         rollAngle: '',
-        rollThreshold: 'Speed at which the effect reaches full strength.',
         vertigoThreshold: 'Speed at which the effect reaches full strength.',
         vertInertia: 'Driver lifts off the seat when the car is airborne and sinks under compression.',
         vertInertiaMax: 'Max upward float (cm) when the car drops away or goes light.',
@@ -569,7 +555,7 @@ angular.module('beamng.apps')
       };
       // per-section twirl state; every section starts open (none collapsed)
       scope.collapsed = { cam: false, steer: false, glance: false, speed: false };
-      scope.openDD = null;   // open custom dropdown ('preset'|'curve'|'transition'|'rollSource'|null)
+      scope.openDD = null;   // open custom dropdown ('preset'|'curve'|'transition'|null)
       scope.curveOptions = [
         { k: 'Exponential', l: 'Exponential (native)' },
         { k: 'Linear', l: 'Linear' },
@@ -594,18 +580,6 @@ angular.module('beamng.apps')
       scope.transitionLabel = function (k) {
         for (var i = 0; i < scope.transitionOptions.length; i++) {
           if (scope.transitionOptions[i].k === k) { return scope.transitionOptions[i].l; }
-        }
-        return k;
-      };
-      // what drives the corner head-roll (see steercam.lua): steering input vs the
-      // real lateral g-force ("inertia"), which follows actual cornering load.
-      scope.rollSourceOptions = [
-        { k: 'Steering', l: 'Steering input' },
-        { k: 'Inertia', l: 'Inertia (g-force)' }
-      ];
-      scope.rollSourceLabel = function (k) {
-        for (var i = 0; i < scope.rollSourceOptions.length; i++) {
-          if (scope.rollSourceOptions[i].k === k) { return scope.rollSourceOptions[i].l; }
         }
         return k;
       };
@@ -693,8 +667,8 @@ angular.module('beamng.apps')
         glanceFastEnable: false, glanceFastTime: 60, glanceFastSpeed: 120,
         glanceOffsetLeft: 0.10, glanceOffsetRight: 0.10, glanceOffsetBack: 0, glanceBackRoll: 0,
         speedModEnable: true,
-        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, rollThreshold: 160, vertigoThreshold: 160,
-        rollSource: 'Steering', vertInertia: false, vertInertiaMax: 8, vertSquishMax: 8, vertInertiaSpeed: 4,
+        vertigo: false, vertigoFov: 12, vertigoDolly: 0.30, speedRoll: false, rollAngle: 5, vertigoThreshold: 160,
+        vertInertia: false, vertInertiaMax: 8, vertSquishMax: 8, vertInertiaSpeed: 4,
         engineVibe: false, vibeAmount: 0.2, vibeRotAmount: 0.15,
         speedRumble: false, speedRumbleDistance: 0.5, speedRumbleSpeed: 200,
         speedPan: false, speedPanInfluence: 40, speedPanAnticipate: 200, speedPanRampSpeed: 60
@@ -932,13 +906,6 @@ angular.module('beamng.apps')
         if (scope.locked) { return; }
         scope.cfg.glanceTransition = name;
         pushOne('glanceTransition', name);
-      };
-
-      // pick what drives the corner head-roll (Steering / Inertia)
-      scope.setRollSource = function (name) {
-        if (scope.locked) { return; }
-        scope.cfg.rollSource = name;
-        pushOne('rollSource', name);
       };
 
       // close an open custom dropdown when clicking/tapping anywhere outside it

@@ -20,7 +20,7 @@ if not steerCam then
   -- writes both take it from here. app.json is the one exception -- the game parses that
   -- manifest itself, before any mod Lua runs, so it can't read this. Bump BOTH on release;
   -- the check below catches a half-bump instead of letting it ship silently.
-  steerCam.version = "1.4"
+  steerCam.version = "1.3"
   do
     local app = jsonReadFile and jsonReadFile("/ui/modules/apps/SteerCam/app.json")
     local av = app and app.version
@@ -63,7 +63,7 @@ if not steerCam then
     glanceCurve = "Exponential", glanceTransition = "Fixed time",
     glanceFastEnable = false, glanceFastTime = 60.0, glanceFastSpeed = 120.0,
     speedModEnable = false, vertigo = false, vertigoFov = 12.0, vertigoDolly = 0.30,
-    speedRoll = false, rollAngle = 5.0, rollThreshold = 160.0, rollSource = "Steering", vertigoThreshold = 160.0,
+    speedRoll = false, rollAngle = 5.0, vertigoThreshold = 160.0,
     vertInertia = false, vertInertiaMax = 8.0, vertSquishMax = 8.0, vertInertiaSpeed = 4.0,
     engineVibe = false, vibeAmount = 0.2, vibeRotAmount = 0.15,
     speedRumble = false, speedRumbleDistance = 0.5, speedRumbleSpeed = 200.0,
@@ -84,7 +84,7 @@ if not steerCam then
     glanceLeft = {0, 170}, glanceRight = {0, 170}, glanceBack = {-90, 90}, glanceTime = {0, 1000},
     glanceFastTime = {0, 1000}, glanceFastSpeed = {20, 400},
     glanceOffsetLeft = {-0.5, 0.5}, glanceOffsetRight = {-0.5, 0.5}, glanceOffsetBack = {-0.5, 0.5}, glanceBackRoll = {-15, 15},
-    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, rollThreshold = {20, 400}, vertigoThreshold = {20, 400},
+    vertigoFov = {0, 40}, vertigoDolly = {0, 1.5}, rollAngle = {0, 20}, vertigoThreshold = {20, 400},
     vertInertiaMax = {0, 30}, vertSquishMax = {0, 30}, vertInertiaSpeed = {1, 4},
     vibeAmount = {0, 0.5}, vibeRotAmount = {0, 1},
     speedRumbleDistance = {0, 2}, speedRumbleSpeed = {20, 400},
@@ -96,7 +96,7 @@ if not steerCam then
     reverseSteer = true, vertInertia = true, engineVibe = true,
     speedRumble = true, glanceFastEnable = true, speedPan = true,
   }
-  local strs = { glanceCurve = true, glanceTransition = true, rollSource = true }   -- string-valued settings
+  local strs = { glanceCurve = true, glanceTransition = true }   -- string-valued settings
   -- Toggles whose change should ALSO snap the steer-pan/reverse tween (see _snapNext
   -- in update()): only the steer group, so flipping an unrelated option can't hitch
   -- the pan mid-corner. (Numeric sliders never snap -- see steerCam.set.)
@@ -104,11 +104,10 @@ if not steerCam then
   -- Which eased smoothers a toggle owns, so flipping it snaps ONLY its own effect and
   -- A/B testing one option can't jolt an unrelated one. A key missing here snaps nothing
   -- (speedRumble, vertigo: no eased state of their own). spdSmooth is deliberately absent
-  -- everywhere -- it feeds roll/vertigo/pan/rumble alike, so no single toggle owns it; it
+  -- everywhere -- it feeds vertigo/pan/rumble alike, so no single toggle owns it; it
   -- only snaps on the whole-config changes below, which set every group at once.
   local snapGroups = {
     speedRoll      = { roll = true },
-    rollSource     = { roll = true },
     speedPan       = { pan  = true },
     vertInertia    = { vert = true },
     engineVibe     = { vibe = true },
@@ -415,7 +414,7 @@ if not steerCam then
     "steerEnable", "angle", "reach", "stiffness", "reverseSteer", "reverseAngle", "reverseTime", "speedFade", "fadeSpeed", "fadeFloor",
     "glanceEnable", "glanceLeft", "glanceOffsetLeft", "glanceRight", "glanceOffsetRight", "glanceBack", "glanceOffsetBack", "glanceBackRoll",
     "glanceTransition", "glanceTime", "glanceCurve", "glanceFastEnable", "glanceFastTime", "glanceFastSpeed",
-    "speedModEnable", "vertigo", "vertigoFov", "vertigoDolly", "speedRoll", "rollAngle", "rollSource", "rollThreshold", "vertigoThreshold",
+    "speedModEnable", "vertigo", "vertigoFov", "vertigoDolly", "speedRoll", "rollAngle", "vertigoThreshold",
     "vertInertia", "vertInertiaMax", "vertSquishMax", "vertInertiaSpeed", "speedRumble", "speedRumbleDistance", "speedRumbleSpeed",
     "engineVibe", "vibeAmount", "vibeRotAmount",
     "speedPan", "speedPanInfluence", "speedPanAnticipate", "speedPanRampSpeed",
@@ -717,46 +716,53 @@ local stockCameraMode = usesOccupantCamera and 'core/cameraModes/occupant' or 'c
 local makeStockDriver = require(stockCameraMode)
 
 -- A custom mode named "steercam" has no matching per-seat JBeam camera data.
--- On 0.40+, borrow the native driver occupant's config/ref nodes so the camera uses the
--- same seat as the stock mode. This runs on the first update and on each vehicle change, not in the constructor.
-local function syncOccupantCamera(self, veh)
+-- On 0.40+, borrow the occupant config/ref nodes of the seat the player sits in (the
+-- driver seat when unseated or on cars without the seat system). Runs from update(),
+-- not the constructor, and re-syncs on each vehicle or seat change.
+-- Sets self._seatSide ("left"/"right"/"center", nil = legacy rhd path) and
+-- self._seatDrives (false = passenger: steer-follow is off).
+local function syncOccupantCamera(self, veh, player)
   local manager = extensions and extensions.core_vehicle_manager
   if not usesOccupantCamera or not veh or not manager or type(manager.getVehicleData) ~= 'function' then return end
   local vid = veh:getID()
   if vid == nil then return end
-  if self._steerCamConfigVehicle == vid then return end
+
+  local seats = gameplay_seatOccupants
+  local presence = seats and seats.getPlayerPresence and seats.getPlayerPresence(player or 0)
+  if presence and presence.vehicleId ~= vid then presence = nil end
+  local pm = presence and presence.permissionMode
+  self._seatDrives = pm == nil or pm == 'driver' or pm == 'unrestricted'
+  local seatId = presence and presence.seatId
+
+  local key = vid .. ':' .. tostring(seatId)
+  if self._steerCamConfigKey == key then return end
   local vehicleData = manager.getVehicleData(vid)
   local vmvd = vehicleData and vehicleData.vdata
   if not vmvd then return end
 
-  local driverNode, isRHD
+  local driverNode
   if core_camera and core_camera.getDriverData then
-    driverNode, isRHD = core_camera.getDriverData(veh)
+    driverNode = core_camera.getDriverData(veh)
   end
   local occupantConfigs = vmvd.cameraData and vmvd.cameraData.occupant
-  local driverConfig
+  local seatConfig
   if type(occupantConfigs) == 'table' then
     for _, config in pairs(occupantConfigs) do
-      if type(config) == 'table' and driverNode ~= nil and config.camNodeID == driverNode then
-        driverConfig = config
-        break
-      end
-    end
-    if not driverConfig then
-      local seatName = isRHD and 'FR' or 'FL'
-      for _, config in pairs(occupantConfigs) do
-        if type(config) == 'table' and config.name == seatName then
-          driverConfig = config
-          break
+      if type(config) == 'table' then
+        if seatId ~= nil then
+          if config.name == seatId then seatConfig = config break end
+        elseif driverNode ~= nil and config.camNodeID == driverNode then
+          seatConfig = config break
         end
       end
     end
   end
+  self._seatSide = seatConfig and (seatConfig.seatSide or 'center') or nil
 
   local refNodes
-  if driverConfig then
-    tableMergeRecursive(self, driverConfig)
-    local cameraName = 'occupant.' .. tostring(driverConfig.name)
+  if seatConfig then
+    tableMergeRecursive(self, seatConfig)
+    local cameraName = 'occupant.' .. tostring(seatConfig.name)
     refNodes = vmvd.cameraRefNodes and vmvd.cameraRefNodes[cameraName]
   elseif driverNode ~= nil and self.camNodeID == nil then
     -- Legacy vehicles may not define occupant slots; use their stock driver node.
@@ -765,7 +771,7 @@ local function syncOccupantCamera(self, veh)
         (vmvd.cameraRefNodes['onboard.driver'] or vmvd.cameraRefNodes.driver)
   end
 
-  if (driverConfig or driverNode ~= nil) and self.onVehicleCameraConfigChanged then
+  if (seatConfig or driverNode ~= nil) and self.onVehicleCameraConfigChanged then
     self:onVehicleCameraConfigChanged()
   end
   if not refNodes then
@@ -774,7 +780,7 @@ local function syncOccupantCamera(self, veh)
   if refNodes and self.setRefNodes then
     self:setRefNodes(refNodes.ref, refNodes.left, refNodes.back)
   end
-  self._steerCamConfigVehicle = vid
+  self._steerCamConfigKey = key
 end
 
 local qtmp = quat()
@@ -915,7 +921,7 @@ return function(...)
 
   local stockUpdate = o.update
   o.update = function(self, data)
-    syncOccupantCamera(self, data.veh)
+    syncOccupantCamera(self, data.veh, data.player)
     stockUpdate(self, data)        -- stock fills data.res.pos / rot / fov
     steerCam._frame = (steerCam._frame or 0) + 1   -- heartbeat: UI greys out when this stalls (not in the SteerCam view)
 
@@ -957,18 +963,17 @@ return function(...)
     local snapSteer = steerCam._snapSteer == true
     steerCam._snapNext, steerCam._snapSteer = nil, nil
 
-    -- Driver-seat mirroring: the saved values describe a LEFT-hand-drive seat; in
-    -- a right-hand-drive car we flip the side-specific ones (camera pan + glance
-    -- L/R) so the feel is symmetric about the driver. Input direction is never
-    -- flipped (the right glance still looks right). RHD is the same flag the stock
-    -- driver cam reads (core_camera.getDriverData), cached per vehicle.
-    -- Driver-seat mirroring: recompute EVERY frame (cheap -- the stock driver cam
-    -- calls getDriverData every frame too), so switching vehicles updates the
-    -- mirror immediately with no Ctrl+L. RHD = the vehicle's onboard.driver camera
-    -- flag (same one the stock cam uses for look-back) -- NOT seat-node geometry,
-    -- which is unreliable because some cars centre the cam node.
+    -- Seat mirroring: the saved values describe a LEFT-side seat; in a right-side
+    -- seat we flip the side-specific ones (camera pan, lateral offset, glance L/R)
+    -- so the feel is symmetric about the occupant. Center seats are not mirrored.
+    -- Input direction is never flipped (the right glance still looks right).
+    -- Side comes from the occupied seat's seatSide (0.40+); cars without seat data
+    -- fall back to the driver cam's RHD flag (core_camera.getDriverData) -- NOT
+    -- seat-node geometry, which is unreliable because some cars centre the cam node.
     local rhd = false
-    if data.veh ~= nil and core_camera and core_camera.getDriverData then
+    if self._seatSide ~= nil then
+      rhd = self._seatSide == 'right'
+    elseif data.veh ~= nil and core_camera and core_camera.getDriverData then
       local _, isRHD = core_camera.getDriverData(data.veh)
       rhd = (isRHD == true)
     end
@@ -992,7 +997,7 @@ return function(...)
         gUp:set(data.veh:getDirectionVectorUp())    -- car up (world)
         gRight:setCross(gFwd, gUp); gRight:normalize()
         gFwd:setScaled(c.camFwd or 0)
-        gRight:setScaled(c.camSide or 0)
+        gRight:setScaled((c.camSide or 0) * (mirrored and -1 or 1))
         gUp:setScaled(c.camUp or 0)
         data.res.pos:setAdd(gFwd)
         data.res.pos:setAdd(gRight)
@@ -1039,14 +1044,12 @@ return function(...)
       end
     end
 
-    -- steerRaw is read regardless so the speed-roll can use it even when the
-    -- steer-follow turn is disabled; the yaw itself respects steerEnable.
-    local steerRaw = 0
-    if steerCamFeed ~= nil and data.veh ~= nil then
+    -- Steer-follow only for a seat that controls the car; passengers ease back to center.
+    local steer = 0
+    if c.steerEnable and self._seatDrives ~= false and steerCamFeed ~= nil and data.veh ~= nil then
       local vid = data.veh.getID and data.veh:getID() or nil
-      if vid ~= nil then steerRaw = steerCamFeed[vid] or 0 end
+      if vid ~= nil then steer = steerCamFeed[vid] or 0 end
     end
-    local steer = c.steerEnable and steerRaw or 0
 
     local reachFrac = (c.reach or 100) / 100
     if reachFrac < 0.1 then reachFrac = 0.1 end
@@ -1211,15 +1214,13 @@ return function(...)
     end
 
     -- ----- Immersive extras: FOV vertigo + corner roll + head inertia --------
-    -- Vertigo and steering-roll each ramp to full strength as speed approaches their OWN
-    -- threshold; the inertia effects below use g-force and ignore both.
-    -- Speed is low-passed so tyre scrub/surge can't jitter the roll or FOV.
+    -- Vertigo ramps to full strength as speed approaches its threshold; the inertia
+    -- effects below use g-force and ignore it.
+    -- Speed is low-passed so tyre scrub/surge can't jitter the FOV.
     local spdRaw = (data.vel and data.vel:length()) or 0
     self.spdSmooth = self.spdSmooth + (spdRaw - self.spdSmooth) * (snapAll and 1 or clamp01(dt * 3))
     local vt = (c.vertigoThreshold or 160) / 3.6      -- km/h -> m/s ceiling
     local vertigoFac = clamp01(self.spdSmooth / (vt > 0.1 and vt or 0.1))
-    local rt = (c.rollThreshold or 160) / 3.6
-    local rollFac = clamp01(self.spdSmooth / (rt > 0.1 and rt or 0.1))
     local modsOn = c.speedModEnable
 
     -- Inertia g-force: differentiate the car velocity into the felt LATERAL push
@@ -1264,20 +1265,12 @@ return function(...)
       end
     end
 
-    -- corner roll: lean the head into the turn, up to rollAngle. "Steering" scales
-    -- the steering input by speed (+1 = right, -1 = left). "Inertia" instead leans to
-    -- the real lateral g-force -- already speed-aware via v^2/r, so it responds to
-    -- actual cornering load (and to slides/kerbs), closer to how a real head behaves.
-    -- Both keep the same sign, so rollAngle means the same thing either way.
+    -- corner roll: lean the head into the turn, up to rollAngle, from the real lateral
+    -- g-force -- already speed-aware via v^2/r, so it follows actual cornering load
+    -- (and slides/kerbs) and works the same in every seat.
     local rollTarget = 0
     if modsOn and c.speedRoll then
-      local rollInput
-      if (c.rollSource or "Steering") == "Inertia" then
-        rollInput = clampUnit(self.latAccLP / GFULL)      -- full lean at ~1 g lateral
-      else
-        rollInput = clampUnit(steerRaw) * rollFac
-      end
-      rollTarget = rad(c.rollAngle or 0) * rollInput
+      rollTarget = rad(c.rollAngle or 0) * clampUnit(self.latAccLP / GFULL)   -- full lean at ~1 g lateral
     end
     self.rollCur = self.rollCur + (rollTarget - self.rollCur) * (snapRoll and 1 or clamp01(dt * 6))
 
