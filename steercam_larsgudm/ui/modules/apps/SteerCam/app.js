@@ -5,7 +5,7 @@ angular.module('beamng.apps')
       '<div class="steerCamApp">',
         '<style>',
           '.steerCamApp{font-family:"Segoe UI",sans-serif;color:#e8e8ea;background:rgba(18,18,20,0.88);position:relative;',
-            'border-radius:7px;padding:9px 11px;box-sizing:border-box;width:100%;height:100%;overflow:hidden;font-size:13px;',
+            'border-radius:7px;padding:9px 11px;box-sizing:border-box;width:100%;height:100%;overflow:hidden;font-size:15px;',
             'display:flex;flex-direction:column}',
           // title + presets rows stay pinned; only the categories scroll, so the user can
           // always see/change the active preset and the mod toggle. min-height:0 lets the
@@ -13,37 +13,31 @@ angular.module('beamng.apps')
           // padding-right keeps the right-aligned values clear of the scrollbar (which
           // otherwise eats the gap between the value text and the panel edge).
           '.steerCamApp .sc-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:8px}',
-          '.steerCamApp .sc-title{font-weight:700;font-size:14px;letter-spacing:.5px;color:#ff7a18}',
-          // when an interior view is NOT active, tweaks are not visible -> grey the title +
-          // a grey ring inside the panel edge as a heads-up (.sc-inactive set by the poll).
-          '.steerCamApp.sc-inactive .sc-title{color:#9a9aa0}',
-          '.steerCamApp.sc-inactive{box-shadow:inset 0 0 0 2px #8a8a90}',
-          // ...and EVERYTHING oranges-out to grey while the view is inactive: sliders + their
-          // thumbs (accent-color), every accent (headers, glyphs, twirl, info, gear, presets
-          // label) and the param names. Orange = a live/active change; grey = you are changing
-          // it but not seeing it (not in an interior view). !important: the per-input orange
-          // rules below (.sc-row input[type=range] etc.) are more specific and would win,
-          // leaving the sliders orange while inactive.
-          '.steerCamApp.sc-inactive input{accent-color:#8a8a90 !important}',
-          '.steerCamApp.sc-inactive .sc-sec,.steerCamApp.sc-inactive .sc-look-hd,',
-            '.steerCamApp.sc-inactive .sc-tw,.steerCamApp.sc-inactive .sc-info,',
-            '.steerCamApp.sc-inactive .sc-gear,.steerCamApp.sc-inactive .sc-presets-lbl,',
-            '.steerCamApp.sc-inactive .sc-look-ico,.steerCamApp.sc-inactive .sc-look-name,',
-            '.steerCamApp.sc-inactive .sc-row>span{color:#9a9aa0}',
-          '.steerCamApp.sc-inactive .sc-look-on,.steerCamApp.sc-inactive .sc-glance-btns button.active{background:#8a8a90}',
+          '.steerCamApp .sc-title{font-weight:700;font-size:16px;letter-spacing:.5px;color:#ff7a18}',
+          // not in an interior view: a blocking grey veil over everything below the header
+          // (.sc-inactive set by the poll), with a button to switch to the interior camera.
+          '.steerCamApp .sc-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;position:relative}',
+          '.steerCamApp .sc-gate{position:absolute;inset:0;z-index:200;display:none;flex-direction:column;align-items:center;',
+            'justify-content:center;gap:14px;padding:16px;text-align:center;border-radius:5px;background:rgba(200,200,205,0.85)}',
+          '.steerCamApp.sc-inactive .sc-gate{display:flex}',
+          '.steerCamApp .sc-gate-txt{color:#111;font-size:20px;font-weight:700;line-height:1.3}',
+          '.steerCamApp .sc-gate-btn{background:#161616;color:#fff;border:none;border-radius:4px;padding:7px 14px;font-size:15px;cursor:pointer}',
+          '.steerCamApp .sc-gate-btn:hover{background:#ff7a18;color:#161616}',
+          // auto-fade while driving: fades out over 1.5s, snaps back (the base rule has no transition)
+          '.steerCamApp.sc-faded{opacity:0.36;transition:opacity 1.5s linear}',
           '.steerCamApp .sc-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex:0 0 auto}',
           // hidden by the toggle key: the whole panel stops rendering. The directive stays
           // alive (display:none doesn't kill the scope), so the poll still sees the unhide.
           '.steerCamApp.sc-hidden{display:none}',
           '.steerCamApp .sc-title-hidden{color:#9a9aa0}',
-          '.steerCamApp .sc-hidehint{font-size:10px;color:#7a7a80;margin:-3px 0 7px;flex:0 0 auto}',
-          '.steerCamApp .sc-mod-en{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#9a9aa0;cursor:pointer}',
+          '.steerCamApp .sc-hidehint{font-size:16px;color:#7a7a80;margin:-3px 0 7px;flex:0 0 auto}',
+          '.steerCamApp .sc-mod-en{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#9a9aa0;cursor:pointer}',
           '.steerCamApp .sc-mod-en input{accent-color:#ff7a18;margin:0}',
-          '.steerCamApp .sc-mirror{display:flex;align-items:center;gap:7px;margin:0 0 8px;font-size:11px;color:#cfcfd4;cursor:pointer}',
+          '.steerCamApp .sc-mirror{display:flex;align-items:center;gap:7px;margin:0 0 8px;font-size:13px;color:#cfcfd4;cursor:pointer}',
           '.steerCamApp .sc-mirror input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-presets{display:flex;gap:5px;margin-bottom:8px}',
           '.steerCamApp .sc-presets button{flex:1 1 0;background:rgba(255,255,255,0.08);color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);',
-            'border-radius:4px;padding:4px 6px;font-size:11px;cursor:pointer}',
+            'border-radius:4px;padding:4px 6px;font-size:13px;cursor:pointer}',
           '.steerCamApp .sc-presets button:hover{background:rgba(255,255,255,0.16)}',
           '.steerCamApp .sc-presets button.active{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
           // preview buttons as a unified segmented (radio) control: one bordered, rounded
@@ -54,7 +48,7 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-glance-btns{display:flex;gap:0;margin:7px 0 2px;',
             'border:1px solid rgba(255,255,255,0.14);border-radius:5px;overflow:hidden}',
           '.steerCamApp .sc-glance-btns button{flex:1 1 0;background:rgba(255,255,255,0.06);color:#e8e8ea;',
-            'border:none;border-right:1px solid rgba(255,255,255,0.14);padding:5px 6px;font-size:12px;cursor:pointer}',
+            'border:none;border-right:1px solid rgba(255,255,255,0.14);padding:5px 6px;font-size:14px;cursor:pointer}',
           '.steerCamApp .sc-glance-btns button:last-child{border-right:none}',
           '.steerCamApp .sc-glance-btns button:hover{background:rgba(255,255,255,0.14)}',
           '.steerCamApp .sc-glance-btns button.active{background:#ff7a18;color:#161616;font-weight:700}',
@@ -69,16 +63,16 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-row>span{flex:0 0 110px;white-space:nowrap}',
           '.steerCamApp .sc-row input[type=range]{flex:1 1 auto;min-width:34px;accent-color:#ff7a18;outline:none}',
           '.steerCamApp .sc-presets-row{display:flex;align-items:center;gap:7px;margin-bottom:8px;flex:0 0 auto;position:relative;z-index:5}',
-          '.steerCamApp .sc-presets-lbl{flex:0 0 auto;font-weight:700;font-size:12px;color:#ff7a18}',
+          '.steerCamApp .sc-presets-lbl{flex:0 0 auto;font-weight:700;font-size:14px;color:#ff7a18}',
           '.steerCamApp .sc-dd{position:relative;flex:1 1 auto}',
           '.steerCamApp .sc-dd-head{width:100%;display:flex;justify-content:space-between;align-items:center;',
             'background:rgba(255,255,255,0.08);color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);',
-            'border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer}',
+            'border-radius:4px;padding:4px 7px;font-size:13px;cursor:pointer}',
           '.steerCamApp .sc-dd-head:hover{background:rgba(255,255,255,0.16)}',
-          '.steerCamApp .sc-dd-arr{color:#ff7a18;font-size:9px;margin-left:6px}',
+          '.steerCamApp .sc-dd-arr{color:#ff7a18;font-size:11px;margin-left:6px}',
           '.steerCamApp .sc-dd-list{position:absolute;top:100%;left:0;right:0;z-index:20;',
             'background:rgba(28,28,32,0.98);border:1px solid rgba(255,255,255,0.18);border-radius:4px;overflow:hidden}',
-          '.steerCamApp .sc-dd-opt{display:flex;align-items:center;gap:6px;padding:5px 7px;font-size:11px;cursor:pointer}',
+          '.steerCamApp .sc-dd-opt{display:flex;align-items:center;gap:6px;padding:5px 7px;font-size:13px;cursor:pointer}',
           '.steerCamApp .sc-dd-opt:hover{background:rgba(255,255,255,0.12)}',
           '.steerCamApp .sc-dd-opt.active{background:#ff7a18;color:#161616;font-weight:700}',
           '.steerCamApp .sc-row>b{flex:0 0 46px;text-align:right;color:#fff;font-variant-numeric:tabular-nums}',
@@ -120,17 +114,17 @@ angular.module('beamng.apps')
           // the vertical divider meets it with no gap.
           '.steerCamApp .sc-look-behind{grid-column:1 / -1;border-top:1px solid rgba(255,255,255,0.12);',
             'margin:0 -9px 0;padding:6px 9px 0}',
-          '.steerCamApp .sc-look-hd{grid-column:1 / -1;font-size:11px;font-weight:700;letter-spacing:.5px;color:#ffae6b;margin-bottom:1px}',
+          '.steerCamApp .sc-look-hd{grid-column:1 / -1;font-size:13px;font-weight:700;letter-spacing:.5px;color:#ffae6b;margin-bottom:1px}',
           // the cell is transparent (display:contents) so its name|glyph|slider|value become
           // the four grid cells of the group directly -> they align across every row.
           '.steerCamApp .sc-look-cell{display:contents}',
-          '.steerCamApp .sc-look-name{font-size:12px;white-space:nowrap;overflow:hidden}',
+          '.steerCamApp .sc-look-name{font-size:14px;white-space:nowrap;overflow:hidden}',
           '.steerCamApp .sc-look-cell input[type=range]{width:100%;min-width:0;margin:0;accent-color:#ff7a18;outline:none}',
-          '.steerCamApp .sc-look-cell b{justify-self:end;color:#fff;font-weight:600;font-size:12px;font-variant-numeric:tabular-nums}',
+          '.steerCamApp .sc-look-cell b{justify-self:end;color:#fff;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}',
           // type-marker glyph after each property name (direction-coded; head tilt = a tilted
           // smiley "head"). display:inline-block lets .sc-ico-tilt rotate it.
-          '.steerCamApp .sc-look-ico{color:#ff9a3c;font-size:14px;opacity:0.85}',
-          '.steerCamApp .sc-ico-tilt{transform:rotate(-16deg);font-size:14px}',
+          '.steerCamApp .sc-look-ico{color:#ff9a3c;font-size:16px;opacity:0.85}',
+          '.steerCamApp .sc-ico-tilt{transform:rotate(-16deg);font-size:16px}',
           // active direction: the whole Look group inverts to orange (like its Preview radio
           // button) while that side is previewed OR its hotkey is held/toggled. glanceSide
           // (polled from the live glance state) drives it, so keybinds light it up too.
@@ -146,7 +140,7 @@ angular.module('beamng.apps')
           // one line, .sc-narrow (set from JS by the panel width) hides the property NAME and
           // lets the type-glyph stand in for it -- the direction sub-header still gives context.
           '.steerCamApp.sc-narrow .sc-look-txt{display:none}',
-          '.steerCamApp.sc-narrow .sc-look-ico{margin-left:0;font-size:15px;opacity:1}',
+          '.steerCamApp.sc-narrow .sc-look-ico{margin-left:0;font-size:17px;opacity:1}',
           // slider with a "cap" marker (used by the quicker-glance Fast time): a relative
           // wrapper holds the range + a dashed orange line at the cap, and the thumb greys
           // (accent-color) once dragged past it.
@@ -163,32 +157,32 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-sec .sc-en{display:flex;align-items:center;justify-content:space-between}',
           '.steerCamApp .sc-sec .sc-en input{accent-color:#ff7a18;margin:0}',
           '.steerCamApp .sc-sec-name{display:flex;align-items:center;gap:6px;flex:1 1 auto;cursor:pointer;user-select:none}',
-          '.steerCamApp .sc-tw{display:inline-block;font-size:16px;color:#ff7a18;transition:transform .15s ease}',
+          '.steerCamApp .sc-tw{display:inline-block;font-size:18px;color:#ff7a18;transition:transform .15s ease}',
           '.steerCamApp .sc-tw.open{transform:rotate(90deg)}',
           '.steerCamApp .sc-off{opacity:0.4;pointer-events:none}',
           // dim a disabled section's header text without blocking its collapse click
           '.steerCamApp .sc-sec-name.sc-dim{opacity:0.4}',
-          '.steerCamApp .sc-hint{font-size:11px;color:#9a9aa0;margin-top:6px}',
+          '.steerCamApp .sc-hint{font-size:13px;color:#9a9aa0;margin-top:6px}',
           '.steerCamApp .sc-tipsrc{display:none}',
           // small ⓘ marker appended (dynamically, via ng-if) to anything with a tooltip
-          '.steerCamApp .sc-info{margin-left:3px;font-size:10px;color:#ff7a18;opacity:0.7}',
+          '.steerCamApp .sc-info{margin-left:3px;font-size:12px;color:#ff7a18;opacity:0.7}',
           // hover bubble lives on <body> (escapes the panel overflow), so this rule
           // is intentionally NOT scoped under .steerCamApp:
           '.sc-bubble{position:fixed;z-index:99999;max-width:240px;background:#fff;color:#111;',
-            'font-size:13px;line-height:1.32;padding:6px 9px;border-radius:5px;',
+            'font-size:15px;line-height:1.32;padding:6px 9px;border-radius:5px;',
             'box-shadow:0 3px 12px rgba(0,0,0,0.45);pointer-events:none;white-space:pre-line;display:none}',
           // preset dropdown rows: name (clickable) + protected lock + delete-x; plus
           // a separator and the "save as new" action item at the bottom of the list
           '.steerCamApp .sc-dd-name{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-          '.steerCamApp .sc-lock{flex:0 0 auto;font-size:10px;opacity:0.7;filter:grayscale(1)}',   // monochrome padlock
-          '.steerCamApp .sc-del-x{flex:0 0 auto;font-size:14px;line-height:1;opacity:0.5;cursor:pointer}',
+          '.steerCamApp .sc-lock{flex:0 0 auto;font-size:12px;opacity:0.7;filter:grayscale(1)}',   // monochrome padlock
+          '.steerCamApp .sc-del-x{flex:0 0 auto;font-size:16px;line-height:1;opacity:0.5;cursor:pointer}',
           '.steerCamApp .sc-del-x:hover{opacity:1;color:#ff8a8a}',
           '.steerCamApp .sc-dd-sep{height:1px;background:rgba(255,255,255,0.15);margin:3px 0}',
           '.steerCamApp .sc-dd-save{color:#ffae6b}',
           '.steerCamApp .sc-dd-save:hover{background:rgba(255,122,24,0.18)}',
           // current-selection text in the dropdown head + the "(modified)" tag
           '.steerCamApp .sc-dd-cur{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}',
-          '.steerCamApp .sc-mod-tag{color:#ffae6b;font-size:10px}',
+          '.steerCamApp .sc-mod-tag{color:#ffae6b;font-size:12px}',
           // on the highlighted (orange) dropdown row the tag inverts to black too, so
           // "(modified)" stays legible instead of orange-on-orange noise
           '.steerCamApp .sc-dd-opt.active .sc-mod-tag{color:#161616}',
@@ -200,7 +194,7 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-confirm-btns .yes.danger{background:#c0392b;border-color:#c0392b;color:#fff}',
           // text input reused by the save-as / overwrite modal
           '.steerCamApp .sc-preset-name{width:100%;box-sizing:border-box;margin:0 0 10px;background:rgba(255,255,255,0.08);',
-            'color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 7px;font-size:12px}',
+            'color:#e8e8ea;border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 7px;font-size:14px}',
           '.steerCamApp .sc-preset-name::placeholder{color:#7a7a80}',
           // in-panel confirm overlay (overwrite / delete)
           // above .sc-settings (300) -- the Settings overlay can raise a modal itself
@@ -208,14 +202,14 @@ angular.module('beamng.apps')
             'justify-content:center;background:rgba(0,0,0,0.55);border-radius:7px}',
           '.steerCamApp .sc-confirm-box{background:#1c1c20;border:1px solid rgba(255,255,255,0.2);',
             'border-radius:6px;padding:12px 14px;max-width:240px;text-align:center}',
-          '.steerCamApp .sc-confirm-text{font-size:12px;color:#e8e8ea;margin-bottom:10px;line-height:1.35}',
+          '.steerCamApp .sc-confirm-text{font-size:14px;color:#e8e8ea;margin-bottom:10px;line-height:1.35}',
           '.steerCamApp .sc-confirm-btns{display:flex;gap:7px;justify-content:center}',
           '.steerCamApp .sc-confirm-btns button{background:rgba(255,255,255,0.08);color:#e8e8ea;',
-            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer}',
+            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:4px 12px;font-size:13px;cursor:pointer}',
           '.steerCamApp .sc-confirm-btns .yes{background:#ff7a18;border-color:#ff7a18;color:#161616;font-weight:700}',
           // header: gear (Settings) + Enabled, on the right of the title row
           '.steerCamApp .sc-hdr-right{display:flex;align-items:center;gap:8px}',
-          '.steerCamApp .sc-gear{background:none;border:none;color:#ffae6b;font-size:15px;line-height:1;cursor:pointer;padding:0}',
+          '.steerCamApp .sc-gear{background:none;border:none;color:#ffae6b;font-size:17px;line-height:1;cursor:pointer;padding:0}',
           '.steerCamApp .sc-gear:hover{color:#ff7a18}',
           // settings overlay (darkens the panel)
           '.steerCamApp .sc-settings{position:absolute;inset:0;z-index:300;display:flex;align-items:center;',
@@ -223,20 +217,20 @@ angular.module('beamng.apps')
           '.steerCamApp .sc-settings-box{background:#1c1c20;border:1px solid rgba(255,255,255,0.2);',
             'border-radius:6px;padding:12px 14px;box-sizing:border-box;width:calc(100% - 100px)}',  // 50px each side
           '.steerCamApp .sc-set-close{width:100%;margin-top:12px;background:#ff7a18;border:1px solid #ff7a18;',
-            'color:#161616;font-weight:700;border-radius:4px;padding:5px 0;font-size:12px;cursor:pointer}',
+            'color:#161616;font-weight:700;border-radius:4px;padding:5px 0;font-size:14px;cursor:pointer}',
           '.steerCamApp .sc-set-close:hover{background:#ff8c33}',
           '.steerCamApp .sc-settings-hd{display:flex;justify-content:space-between;align-items:center;',
-            'font-weight:700;color:#ff7a18;font-size:13px;margin-bottom:8px}',
-          '.steerCamApp .sc-settings-x{cursor:pointer;font-size:17px;line-height:1;opacity:0.7;color:#e8e8ea}',
+            'font-weight:700;color:#ff7a18;font-size:15px;margin-bottom:8px}',
+          '.steerCamApp .sc-settings-x{cursor:pointer;font-size:19px;line-height:1;opacity:0.7;color:#e8e8ea}',
           '.steerCamApp .sc-settings-x:hover{opacity:1}',
-          '.steerCamApp .sc-set-chk{display:flex;align-items:center;gap:7px;font-size:11px;color:#cfcfd4;cursor:pointer;margin:9px 0 0}',
+          '.steerCamApp .sc-set-chk{display:flex;align-items:center;gap:7px;font-size:13px;color:#cfcfd4;cursor:pointer;margin:9px 0 0}',
           '.steerCamApp .sc-set-chk input{accent-color:#ff7a18;margin:0}',
-          '.steerCamApp .sc-set-note{font-size:10px;color:#9a9aa0;margin:3px 0 4px 22px}',
+          '.steerCamApp .sc-set-note{font-size:12px;color:#9a9aa0;margin:3px 0 4px 22px}',
           // full-width utility button in the Settings overlay (opens the notary file)
           '.steerCamApp .sc-set-btn{width:100%;margin-top:11px;background:rgba(255,255,255,0.08);color:#ffae6b;',
-            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 0;font-size:11px;cursor:pointer}',
+            'border:1px solid rgba(255,255,255,0.14);border-radius:4px;padding:5px 0;font-size:13px;cursor:pointer}',
           '.steerCamApp .sc-set-btn:hover{background:rgba(255,122,24,0.18)}',
-          '.steerCamApp .sc-set-ver{font-size:10px;color:#7a7a80;border-top:1px solid rgba(255,255,255,0.12);',
+          '.steerCamApp .sc-set-ver{font-size:12px;color:#7a7a80;border-top:1px solid rgba(255,255,255,0.12);',
             'margin-top:10px;padding-top:8px;text-align:center}',
         '</style>',
 
@@ -247,8 +241,9 @@ angular.module('beamng.apps')
             '<label class="sc-mod-en"><input type="checkbox" ng-model="modEnabled" ng-change="setMod(modEnabled)"><span>Mod enabled</span><span class="sc-tipsrc" ng-if="tips.modEnable">{{tips.modEnable}}</span><span class="sc-info" ng-if="tips.modEnable">&#9432;</span></label>',
           '</div>',
         '</div>',
-        '<div class="sc-hidehint">Press {{panelKeyLabel}} to hide/unhide panel.</div>',
+        '<div class="sc-hidehint">Press <b>{{panelKeyLabel}}</b> to hide/unhide panel.</div>',
 
+        '<div class="sc-body">',
         '<div class="sc-presets-row">',
           '<span class="sc-presets-lbl">Presets</span>',
           '<div class="sc-dd" ng-mouseleave="openDD=null">',
@@ -275,7 +270,7 @@ angular.module('beamng.apps')
           '<div class="sc-row"><span>Forward Offset<span class="sc-tipsrc" ng-if="tips.camFwd">{{tips.camFwd}}</span><span class="sc-info" ng-if="tips.camFwd">&#9432;</span></span>',
             '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camFwd" ng-change="set(\'camFwd\', cfg.camFwd)" ng-disabled="locked">',
             '<b>{{cfg.camFwd}}m</b></div>',
-          '<div class="sc-row"><span>Lateral Offset<span class="sc-tipsrc" ng-if="tips.camSide">{{tips.camSide}}</span><span class="sc-info" ng-if="tips.camSide">&#9432;</span></span>',
+          '<div class="sc-row"><span>Horizontal Offset<span class="sc-tipsrc" ng-if="tips.camSide">{{tips.camSide}}</span><span class="sc-info" ng-if="tips.camSide">&#9432;</span></span>',
             '<input type="range" min="-0.5" max="0.5" step="0.01" ng-model="cfg.camSide" ng-change="set(\'camSide\', cfg.camSide)" ng-disabled="locked">',
             '<b>{{cfg.camSide}}m</b></div>',
           '<div class="sc-row"><span>Vertical Offset<span class="sc-tipsrc" ng-if="tips.camUp">{{tips.camUp}}</span><span class="sc-info" ng-if="tips.camUp">&#9432;</span></span>',
@@ -444,6 +439,11 @@ angular.module('beamng.apps')
             '<b>{{cfg.vibeRotAmount}}°</b></div>',
         '</div>',
         '</div>',
+          '<div class="sc-gate">',
+            '<div class="sc-gate-txt">SteerCam only works from the interior camera</div>',
+            '<button class="sc-gate-btn" ng-click="jumpToInterior()">Go to interior camera</button>',
+          '</div>',
+        '</div>',
 
         '<div class="sc-confirm" ng-if="modal">',
           '<div class="sc-confirm-box">',
@@ -506,7 +506,7 @@ angular.module('beamng.apps')
         speed: 'Optional immersive effects: FOV vertigo, corner head-roll, and vertical head inertia. Off by default.',
         twirl: 'Double click header to collapse/expand all',
         camFwd: '',
-        camSide: 'Positive moves right; negative moves left, relative to the vehicle.',
+        camSide: '',
         camUp: '',
         camYaw: '',
         camPitch: '',
@@ -691,16 +691,73 @@ angular.module('beamng.apps')
       // reflect the LIVE glance (hold keybind > toggle keybind > UI preview) so the
       // Preview buttons highlight whenever a glance is active -- from ANY source --
       // and clear the instant it ends. Polled, so keybind glances update the UI too.
-      // grey-out heartbeat: steerCam._frame bumps every frame an interior view is active.
+      // Interior-view heartbeat: steerCam._frame bumps every frame an interior view is active.
       // If it hasn't advanced since the last poll we're NOT in that view (tweaks invisible),
-      // so add .sc-inactive to the root -> grey title + grey panel ring.
+      // so add .sc-inactive to the root -> the blocking veil over the settings.
       var lastActiveFrame = -1;
+      // Auto-fade: cursor still for FADE_IDLE_MS while the car moves faster than FADE_KMH.
+      // Any mouse move/click/wheel or SteerCam key (glance, hide) snaps it back; never while paused.
+      var FADE_IDLE_MS = 12000, FADE_KMH = 2;
+      var lastInput = Date.now(), keySig = null;
+      function wake() {
+        lastInput = Date.now();
+        element[0].classList.remove('sc-faded');
+      }
+      ['mousemove', 'mousedown', 'wheel'].forEach(function (ev) { window.addEventListener(ev, wake, true); });
+      scope.$on('$destroy', function () {
+        ['mousemove', 'mousedown', 'wheel'].forEach(function (ev) { window.removeEventListener(ev, wake, true); });
+      });
+      // UI scale: the game sets the root font size to 16px x its UI scale. Our CSS is in px,
+      // so scale the whole panel to match, sized up-front so it still fills the app box.
+      var uiScale = 1;
+      function syncUiScale() {
+        var z = (parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16) / 16;
+        if (Math.abs(z - uiScale) < 0.001) { return; }
+        uiScale = z;
+        var st = element[0].style;
+        st.transformOrigin = '0 0';
+        st.transform = z === 1 ? '' : 'scale(' + z + ')';
+        st.width = st.height = (100 / z) + '%';
+      }
+      scope.jumpToInterior = function () { bngApi.engineLua('if steerCam then steerCam.jumpToInterior() end'); };
+      // Pin the app box: the game stores HUD app placement in em (moves/grows with UI scale,
+      // not clamped on screen outside the layout editor). When ours is in em/px, measure the
+      // box as shown, pull it fully on screen (same size), and save it back as %.
+      var pinSent = null;
+      function syncPin() {
+        var item = element[0].closest('.overlay-item');
+        var frame = item && (item.offsetParent || item.parentElement);
+        if (!frame) { return; }
+        var s = item.style;
+        var sig = [s.left, s.right, s.top, s.bottom, s.width, s.height].join('|');
+        if (!/(em|px)/.test(sig) || sig === pinSent) { return; }
+        var fr = frame.getBoundingClientRect(), ir = item.getBoundingClientRect();
+        var k = fr.width / (frame.clientWidth || fr.width);   // undo any transform on the frame
+        var fw = frame.clientWidth, fh = frame.clientHeight;
+        if (!(k > 0) || !fw || !fh || !ir.width) { return; }
+        var w = ir.width / k, h = ir.height / k;
+        var x = Math.min(Math.max((ir.left - fr.left) / k, 0), Math.max(fw - w, 0));
+        var y = Math.min(Math.max((ir.top - fr.top) / k, 0), Math.max(fh - h, 0));
+        // % position = background-position ratio of the free space (0% flush left, 100% flush right)
+        function pos(p, size, f) { return (f > size ? (p / (f - size)) * 100 : 0).toFixed(2) + '%'; }
+        var placement = { position: 'absolute', left: pos(x, w, fw), top: pos(y, h, fh), right: '', bottom: '',
+                          width: (w / fw * 100).toFixed(2) + '%', height: (h / fh * 100).toFixed(2) + '%' };
+        pinSent = sig;
+        bngApi.engineLua('if steerCam then steerCam.pinPanel(' + bngApi.serializeToLua(placement) + ') end');
+      }
       function syncGlance() {
+        syncUiScale();
         bngApi.engineLua('steerCam and steerCam.getGlanceState() or nil', function (st) {
           if (st && typeof st === 'object') {
             var f = st.active || 0;
             element[0].classList.toggle('sc-inactive', f === lastActiveFrame);
             lastActiveFrame = f;
+            if (!st.editing) { syncPin(); }
+            var ks = [st.hold, st.toggle, st.hidden].join('|');
+            if (ks !== keySig || st.paused) { keySig = ks; wake(); }
+            if (!st.editing && (st.kmh || 0) > FADE_KMH && Date.now() - lastInput >= FADE_IDLE_MS) {
+              element[0].classList.add('sc-faded');
+            }
             // Hidden stops the panel rendering -- EXCEPT while the HUD layout editor is
             // open, where it stays put (retitled "(HIDDEN)") so it can still be placed.
             // classList, not ng-class: sc-inactive above shares this element and ng-class

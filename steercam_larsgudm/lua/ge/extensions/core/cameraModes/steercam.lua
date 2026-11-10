@@ -704,8 +704,40 @@ if not steerCam then
                     and extensions.ui_appLayouts.isEditing() or false
     local key = core_input_bindings and core_input_bindings.getControlForAction
                 and core_input_bindings.getControlForAction("steercam_toggle_panel") or nil
+    local veh = be and be:getPlayerVehicle(0)
+    local kmh = veh and veh:getVelocity():length() * 3.6 or 0
     return { hold = hold, toggle = steerCam.glanceToggleSide, preview = steerCam.glancePreview, active = steerCam._frame or 0,
-             hidden = steerCam.panelHidden, editing = editing, panelKey = key }
+             hidden = steerCam.panelHidden, editing = editing, panelKey = key, kmh = kmh,
+             paused = simTimeAuthority and simTimeAuthority.getPause() == true }
+  end
+
+  -- UI "go to interior camera": the player's own seat camera, else the car's driver seat camera.
+  function steerCam.jumpToInterior()
+    local veh = be and be:getPlayerVehicle(0)
+    if not veh or not core_camera then return end
+    local vid = veh:getID()
+    local seats = gameplay_seatOccupants
+    local p = seats and seats.getPlayerPresence and seats.getPlayerPresence(0)
+    local name = p and p.vehicleId == vid and p.seatId and ('occupant.' .. p.seatId) or nil
+    local cams = core_camera.getCameraDataById(vid)
+    if not (name and cams and cams[name]) then name = core_camera.getDriverCameraNameById(vid) end
+    if name then core_camera.setByName(0, name) end
+  end
+
+  -- UI: store the panel's placement in the active HUD layout (as % values, which the game
+  -- keeps screen-relative: UI scale can't move or resize it, and it can't sit off-screen).
+  -- saveLayout broadcasts UiAppLayoutsChanged, so the live HUD picks it up.
+  function steerCam.pinPanel(placement)
+    local L = extensions.ui_appLayouts
+    local layout = L and L.getCurrentLayout and L.getCurrentLayout()
+    if type(placement) ~= 'table' or type(layout) ~= 'table' or type(layout.apps) ~= 'table' then return end
+    for _, entry in ipairs(layout.apps) do
+      if entry.appName == 'steerCam' then
+        entry.placement = placement
+        L.saveLayout(layout)
+        return
+      end
+    end
   end
 end
 
