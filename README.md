@@ -36,7 +36,7 @@ based on steer input, but the project has grown a lot in scope since that initia
 
 ## Compatibility
 - BeamNG.drive 0.40+
-- Adds a new camera type rather than overwriting one, so should work with other camera mods!
+- Per car customization should work with modded cars (let me know if it doesn't!)
 
 ## Credits
 Vibe coded by: **LarsGudm**, with Claude Opus and Fable.
